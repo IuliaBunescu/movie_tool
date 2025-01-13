@@ -38,3 +38,4 @@ Thumbs.db
 
 # ignore specific folders and files #
 ######################
+.venv/
