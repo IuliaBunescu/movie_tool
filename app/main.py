@@ -5,8 +5,14 @@ from src.components.custom_html import (
     CUSTOM_ALERT_SUCCESS,
     CUSTOM_FORM,
 )
-from src.helpers import (
-    get_reference_from_url,
+from src.helper import get_mean_values, get_reference_from_url, get_timestamp
+from src.plots import (
+    plot_categorical_column_percentages,
+    plot_country_counts,
+    plot_country_distribution_pie,
+)
+from src.tmdb import (
+    get_movies_by_genre_from_reference_df,
     search_first_movie_by_title_and_year_tmdb,
 )
 
@@ -16,7 +22,7 @@ st.set_page_config(layout="wide")
 def main():
     st.title("Movie Recommendation Tool for Data Scientists 🎬")
 
-    col1, col2 = st.columns([3, 7])
+    col1, col2 = st.columns([2, 8])
 
     with col1:
         st.header("Choose your data source", divider="gray")
@@ -115,10 +121,17 @@ def main():
             )
 
             if not ref_movie_df.empty:
-                print("First Movie Found:")
                 st.success(f"Data for '{movie_name_tmdb_ref}' found using TMDB API.")
                 st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
                 movie_ref_tmdb = True
+                print(f"\n{'='*50}")
+                print(
+                    f"[{get_timestamp()}] Logging information about the TMDB reference movies DataFrame:"
+                )
+                ref_movie_df.info(
+                    verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                )
+                print(f"{'='*50}\n")
             elif data_submitted:
                 st.error(
                     f"Reference movie '{movie_name_tmdb_ref}' data not found using TMDB API . Try other reference input options."
@@ -202,18 +215,75 @@ def main():
             ):
 
                 st.subheader("Reference Movie Data")
-                st.dataframe(ref_movie_df)
+                st.dataframe(ref_movie_df, use_container_width=True)
 
                 if use_tmdb_api:
                     st.write(" ")
                     st.write(
-                        "The data has been sourced from *TMDB*. The initial selection criterion is **genre**. 1K movies with similar genres will be sources to create a custom dataset for your analysis. "
+                        "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres will be sources to create a custom dataset for your analysis."
                     )
 
-                    st.subheader("General Metrics")
+                    tmdb_movies_df = get_movies_by_genre_from_reference_df(ref_movie_df)
+                    print(f"\n{'='*50}")
+                    print(
+                        f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
+                    )
+                    tmdb_movies_df.info(
+                        verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                    )
+                    print(f"{'='*50}\n")
+
+                    st.subheader("Average Metrics")
+                    mean_metrics = get_mean_values(tmdb_movies_df)
+                    m1, m2, m3 = st.columns(3, vertical_alignment="center")
+                    m1.metric(
+                        "Rating",
+                        f"{mean_metrics[1]}#",
+                        border=True,
+                        help="Average rating for the movies in the dataset.",
+                    )
+                    m2.metric(
+                        "Vote Count",
+                        f"{mean_metrics[2]}#",
+                        border=True,
+                        help="Average vote count for the movies in the dataset.",
+                    )
+                    m3.metric(
+                        "Popularity",
+                        f"{mean_metrics[3]}#",
+                        border=True,
+                        help="Average popularity score for the movies in the dataset.",
+                    )
+
+                    st.subheader("Genre Distribution")
+                    st.plotly_chart(
+                        plot_categorical_column_percentages(tmdb_movies_df, "genres"),
+                        use_container_width=True,
+                    )
+
+                    st.subheader("Country Distribution")
+                    map_col, pie_col = st.columns(2)
+                    with map_col:
+                        st.plotly_chart(
+                            plot_country_counts(
+                                tmdb_movies_df,
+                                "country_of_origin",
+                                "#a6edcd",
+                                "#ffb0b1",
+                            ),
+                            use_container_width=True,
+                        )
+                    with pie_col:
+                        st.plotly_chart(
+                            plot_country_distribution_pie(
+                                tmdb_movies_df, "country_of_origin"
+                            )
+                        )
+
+                    st.subheader("Original Language Distribution")
 
                 for df in dataframes:
-                    st.dataframe(df.head())
+                    st.dataframe(df.head(), use_container_width=True, hide_index=True)
             else:
                 st.write("No correct or not enough data submitted.")
 
