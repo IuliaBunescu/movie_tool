@@ -41,4 +41,5 @@ Thumbs.db
 .venv/
 /data/imdb_movie_titles.tsv
 /app/making_local_dataset.ipynb
+.env
 
