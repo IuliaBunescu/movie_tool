@@ -39,5 +39,6 @@ Thumbs.db
 # ignore specific folders and files #
 ######################
 .venv/
-/data/*
-!/data/.gitignore
+/data/imdb_movie_titles.tsv
+/app/making_local_dataset.ipynb
+
