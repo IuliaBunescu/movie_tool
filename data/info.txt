@@ -1,0 +1,1 @@
+This the data folder. Due to size restrictions it cannot be uploaded to GitHub, however this is where the local database is. 
