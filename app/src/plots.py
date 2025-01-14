@@ -58,6 +58,8 @@ def plot_categorical_column_percentages(dataframe, column_name):
             tickfont=dict(size=14),  # Font size for Y-axis tick labels
         ),
         hoverlabel=dict(font=dict(size=14)),  # Font size for hover labels
+        margin=dict(l=0, r=0, t=0, b=0),  # Set all margins to 0
+        hovermode="x",
     )
 
     # Format the percentage values on the bars
@@ -108,6 +110,10 @@ def plot_country_counts(df, country_column, color1, color2):
         countrycolor="lightgray",
         showframe=True,
         framecolor="white",
+    )
+    fig.update_layout(
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        hoverlabel=dict(font=dict(size=14)),
     )
 
     # Show the plot
@@ -162,9 +168,100 @@ def plot_country_distribution_pie(df, country_column, cap_percentage=3):
         country_counts,
         names="Country",
         values="Count",
-        hole=0.3,  # Optional: creates a donut chart effect
-        color_discrete_sequence=px.colors.sequential.Plasma,
-    )  # You can change the color palette
+        hole=0.5,  # Optional: creates a donut chart effect
+        color_discrete_sequence=px.colors.sequential.Magenta,
+    )
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        hoverlabel=dict(font=dict(size=14)),
+    )
 
     # Show the plot
+    return fig
+
+
+def plot_movies_by_year(df, date_column):
+    """
+    Plots a line plot showing the number of movies released each year.
+    Assumes that `df` has a `release_date` column with date values in 'YYYY-MM-DD' format.
+    """
+    # Convert the release_date column to datetime format (if it's not already)
+    df[date_column] = pd.to_datetime(df[date_column])
+
+    # Extract the year from the release_date
+    df["Year"] = df[date_column].dt.year
+
+    # Count the number of movies released each year
+    movie_count_by_year = df.groupby("Year").size().reset_index(name="Movie Count")
+
+    # Create the line plot using Plotly
+    fig = px.line(
+        movie_count_by_year,
+        x="Year",
+        y="Movie Count",
+        labels={"Year": "Release Year", "Movie Count": "Number of Movies"},
+        markers=True,
+    )
+
+    fig.update_traces(line=dict(color="#e60000"))
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        hoverlabel=dict(font=dict(size=14)),
+        xaxis=dict(
+            titlefont=dict(size=16),  # Font size for X-axis title
+            tickfont=dict(size=14),  # Font size for X-axis tick labels
+        ),
+        yaxis=dict(
+            titlefont=dict(size=16),  # Font size for Y-axis title
+            tickfont=dict(size=14),  # Font size for Y-axis tick labels
+        ),
+        hovermode="x unified",
+    )
+
+    # Show the plot
+    return fig
+
+
+def plot_popularity_vs_vote(
+    df,
+    popularity_column="popularity",
+    vote_column="vote_average",
+    vote_count_column="vote_count",
+):
+    """
+    Plots a scatter plot comparing the popularity score and vote average for each movie.
+    Assumes that `df` has columns `popularity` and `vote_average`.
+
+    Parameters:
+    - popularity_column: The name of the column for popularity score.
+    - vote_column: The name of the column for vote average.
+    """
+    # Ensure the popularity and vote_average columns are numeric
+    df[popularity_column] = pd.to_numeric(df[popularity_column], errors="coerce")
+    df[vote_column] = pd.to_numeric(df[vote_column], errors="coerce")
+
+    # Remove any rows with missing data
+    df = df.dropna(subset=[popularity_column, vote_column])
+
+    # Create the scatter plot
+    fig = px.scatter(
+        df,
+        x=popularity_column,
+        y=vote_column,
+        labels={popularity_column: "Popularity Score", vote_column: "Vote Average"},
+        color=vote_count_column,
+        color_continuous_scale=px.colors.sequential.Magenta,
+        hover_data=[popularity_column, vote_column],
+        marginal_x="histogram",
+    )  # Show additional info on hover
+
+    # Update the layout to adjust the appearance
+    fig.update_layout(
+        xaxis_title="Popularity Score (0-100)",
+        yaxis_title="Vote Average (0-10)",
+        showlegend=False,
+        margin=dict(l=0, r=0, t=0, b=0),
+    )
+
     return fig

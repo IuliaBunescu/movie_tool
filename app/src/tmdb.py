@@ -4,7 +4,6 @@ import os
 import pandas as pd
 import streamlit as st
 import tmdbsimple as tmdb
-from helper import get_timestamp
 
 tmdb.API_KEY = os.getenv("TMDB_API_KEY")
 
@@ -89,9 +88,9 @@ def get_movie_ids_by_genres(genre_names, max_results=1000):
         if genre["name"].lower() in [name.lower() for name in genre_names]
     ]
 
-    # print(f"\n{'='*50}")
-    # print(f"[{get_timestamp()}] Started gathering movie ids for genres: {genre_names} ")
-    # print(f"{'='*50}\n")
+    print(f"\n{'='*50}")
+    print(f"Started gathering movie ids for genres: {genre_names} ")
+    print(f"{'='*50}\n")
 
     if not genre_ids:
         print(f"One or more genres from {genre_names} not found.")
@@ -189,6 +188,10 @@ def get_movies_by_genre_from_reference_df(
     )
     # Get movie IDs by using the genres from the reference DataFrame
     movie_ids = get_movie_ids_by_genres(genres, max_results)
+
+    print(f"\n{'='*50}")
+    print(f"Gathered {len(movie_ids)} movie ids with similar genres.")
+    print(f"{'='*50}\n")
 
     all_movie_data = []
 

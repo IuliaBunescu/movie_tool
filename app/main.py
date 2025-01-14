@@ -3,13 +3,17 @@ import streamlit as st
 from src.components.custom_html import (
     CUSTOM_ALERT_ERROR,
     CUSTOM_ALERT_SUCCESS,
+    CUSTOM_BARS_TAB,
     CUSTOM_FORM,
+    CUSTOM_METRIC,
 )
 from src.helper import get_mean_values, get_reference_from_url, get_timestamp
 from src.plots import (
     plot_categorical_column_percentages,
     plot_country_counts,
     plot_country_distribution_pie,
+    plot_movies_by_year,
+    plot_popularity_vs_vote,
 )
 from src.tmdb import (
     get_movies_by_genre_from_reference_df,
@@ -22,7 +26,7 @@ st.set_page_config(layout="wide")
 def main():
     st.title("Movie Recommendation Tool for Data Scientists 🎬")
 
-    col1, col2 = st.columns([2, 8])
+    col1, col2 = st.columns([2.5, 7.5])
 
     with col1:
         st.header("Choose your data source", divider="gray")
@@ -204,8 +208,9 @@ def main():
         st.header("Results", divider="gray")
 
         tab1, tab2 = st.tabs(
-            ["Exploratory Visualizations of Your Data", "Clustering & Recommendations"]
+            ["Exploratory Visualization of Data", "Clustering & Recommendations"]
         )
+        st.write(CUSTOM_BARS_TAB, unsafe_allow_html=True)
 
         with tab1:
             if (
@@ -238,22 +243,23 @@ def main():
                     m1, m2, m3 = st.columns(3, vertical_alignment="center")
                     m1.metric(
                         "Rating",
-                        f"{mean_metrics[1]}#",
+                        f"{mean_metrics.iloc[1]}#",
                         border=True,
                         help="Average rating for the movies in the dataset.",
                     )
                     m2.metric(
                         "Vote Count",
-                        f"{mean_metrics[2]}#",
+                        f"{mean_metrics.iloc[2]}#",
                         border=True,
                         help="Average vote count for the movies in the dataset.",
                     )
                     m3.metric(
                         "Popularity",
-                        f"{mean_metrics[3]}#",
+                        f"{mean_metrics.iloc[3]}#",
                         border=True,
                         help="Average popularity score for the movies in the dataset.",
                     )
+                    st.write(CUSTOM_METRIC, unsafe_allow_html=True)
 
                     st.subheader("Genre Distribution")
                     st.plotly_chart(
@@ -262,7 +268,7 @@ def main():
                     )
 
                     st.subheader("Country Distribution")
-                    map_col, pie_col = st.columns(2)
+                    map_col, pie_col = st.columns(2, vertical_alignment="center")
                     with map_col:
                         st.plotly_chart(
                             plot_country_counts(
@@ -277,10 +283,23 @@ def main():
                         st.plotly_chart(
                             plot_country_distribution_pie(
                                 tmdb_movies_df, "country_of_origin"
-                            )
+                            ),
+                            use_container_width=True,
                         )
 
-                    st.subheader("Original Language Distribution")
+                    yearly_dist_col, pop_vs_avg_col = st.columns(2)
+                    with yearly_dist_col:
+                        st.subheader("Yearly Distribution")
+                        st.plotly_chart(
+                            plot_movies_by_year(tmdb_movies_df, "release_date"),
+                            use_container_width=True,
+                        )
+                    with pop_vs_avg_col:
+                        st.subheader("TMDB Popularity Score VS Average Rating")
+                        st.plotly_chart(
+                            plot_popularity_vs_vote(tmdb_movies_df),
+                            use_container_width=True,
+                        )
 
                 for df in dataframes:
                     st.dataframe(df.head(), use_container_width=True, hide_index=True)
