@@ -1,5 +1,11 @@
 import pandas as pd
 import streamlit as st
+from src.clustering import (
+    calculate_top_genres,
+    k_prototypes_clustering,
+    merge_clusters_with_preprocessed_df,
+    recommend_similar_movies,
+)
 from src.components.custom_html import (
     CUSTOM_ALERT_ERROR,
     CUSTOM_ALERT_SUCCESS,
@@ -10,13 +16,17 @@ from src.components.custom_html import (
 from src.helper import get_mean_values, get_reference_from_url, get_timestamp
 from src.plots import (
     plot_categorical_column_percentages,
+    plot_cluster_comparison_subplots,
+    plot_cluster_distribution_pie,
+    plot_clusters_with_pca,
+    plot_column_distribution_pie,
     plot_country_counts,
-    plot_country_distribution_pie,
     plot_movies_by_year,
     plot_popularity_vs_vote,
 )
 from src.tmdb import (
     get_movies_by_genre_from_reference_df,
+    prepare_data_for_clustering,
     search_first_movie_by_title_and_year_tmdb,
 )
 
@@ -225,7 +235,7 @@ def main():
                 if use_tmdb_api:
                     st.write(" ")
                     st.write(
-                        "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres will be sources to create a custom dataset for your analysis."
+                        "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
                     )
 
                     tmdb_movies_df = get_movies_by_genre_from_reference_df(ref_movie_df)
@@ -238,9 +248,9 @@ def main():
                     )
                     print(f"{'='*50}\n")
 
-                    st.subheader("Average Metrics")
+                    st.subheader("Metrics")
                     mean_metrics = get_mean_values(tmdb_movies_df)
-                    m1, m2, m3 = st.columns(3, vertical_alignment="center")
+                    m1, m2, m3, m4 = st.columns(4, vertical_alignment="center")
                     m1.metric(
                         "Rating",
                         f"{mean_metrics.iloc[1]}#",
@@ -259,13 +269,30 @@ def main():
                         border=True,
                         help="Average popularity score for the movies in the dataset.",
                     )
-                    st.write(CUSTOM_METRIC, unsafe_allow_html=True)
-
-                    st.subheader("Genre Distribution")
-                    st.plotly_chart(
-                        plot_categorical_column_percentages(tmdb_movies_df, "genres"),
-                        use_container_width=True,
+                    m4.metric(
+                        "IMDB movies",
+                        f"{(tmdb_movies_df['imdb_id'].notnull().sum() / len(tmdb_movies_df) * 100):.2f} %",
+                        border=True,
+                        help="Percentage of movies that have IMDB id.",
                     )
+                    st.write(CUSTOM_METRIC, unsafe_allow_html=True)
+                    genre_col, lang_col = st.columns(2)
+                    with genre_col:
+                        st.subheader("Genre Distribution")
+                        st.plotly_chart(
+                            plot_categorical_column_percentages(
+                                tmdb_movies_df, "genres"
+                            ),
+                            use_container_width=True,
+                        )
+                    with lang_col:
+                        st.subheader("Language Distribution")
+                        st.plotly_chart(
+                            plot_column_distribution_pie(
+                                tmdb_movies_df, "original_language", cap_percentage=2
+                            ),
+                            use_container_width=True,
+                        )
 
                     st.subheader("Country Distribution")
                     map_col, pie_col = st.columns(2, vertical_alignment="center")
@@ -281,7 +308,7 @@ def main():
                         )
                     with pie_col:
                         st.plotly_chart(
-                            plot_country_distribution_pie(
+                            plot_column_distribution_pie(
                                 tmdb_movies_df, "country_of_origin"
                             ),
                             use_container_width=True,
@@ -301,8 +328,110 @@ def main():
                             use_container_width=True,
                         )
 
-                for df in dataframes:
-                    st.dataframe(df.head(), use_container_width=True, hide_index=True)
+                # for df in dataframes:
+                #     st.dataframe(df.head(), use_container_width=True, hide_index=True)
+            else:
+                st.write("No correct or not enough data submitted.")
+        with tab2:
+            if (
+                (use_tmdb_api or use_local_db or dataframes)
+                and (movie_ref_url or movie_ref_local or movie_ref_tmdb)
+                and data_submitted
+            ):
+                if use_tmdb_api:
+                    st.header("K-Prototypes Clustering")
+                    tmdb_movies_prepared_df = prepare_data_for_clustering(
+                        tmdb_movies_df
+                    )
+                    st.write("Using default hyperparameters (8 clusters).")
+                    categorical_columns = [
+                        "original_language",
+                        "country_of_origin",
+                        "genres",
+                    ]
+                    df_kproto = k_prototypes_clustering(
+                        tmdb_movies_prepared_df, categorical_columns
+                    )
+                    df_kproto_final = merge_clusters_with_preprocessed_df(
+                        tmdb_movies_df, df_kproto
+                    )
+
+                    st.subheader("Reference Movie Data")
+                    df_reference_with_cluster = ref_movie_df.merge(
+                        df_kproto_final[["tmdb_id", "cluster"]],
+                        on="tmdb_id",
+                        how="left",
+                    )
+
+                    st.dataframe(df_reference_with_cluster, use_container_width=True)
+
+                    genre_top_col, cluster_dist_col = st.columns(2)
+                    with genre_top_col:
+                        st.subheader("Top Cluster Genre")
+                        st.dataframe(
+                            calculate_top_genres(df_kproto_final),
+                            use_container_width=True,
+                        )
+
+                    with cluster_dist_col:
+                        st.subheader("Cluster distribution")
+                        st.plotly_chart(
+                            plot_cluster_distribution_pie(df_kproto_final),
+                            use_container_width=True,
+                        )
+
+                    st.subheader("Cluster Numerical Feature Averages")
+                    st.plotly_chart(
+                        plot_cluster_comparison_subplots(df_kproto_final),
+                        use_container_width=True,
+                    )
+
+                    st.subheader("2D Cluster Visualization using PCA")
+                    features = [
+                        col
+                        for col in df_kproto.columns
+                        if col not in ["tmdb_id", "title", "cluster"]
+                    ]
+                    st.plotly_chart(
+                        plot_clusters_with_pca(
+                            df_kproto,
+                            cluster_column="cluster",
+                            title_column="title",
+                            id_column="tmdb_id",
+                            features=features,
+                        ),
+                        use_container_width=True,
+                    )
+
+                    st.subheader("Top 10 Movie Recommendations")
+                    st.write(
+                        "The recommended movies belong to the same cluster as the reference movie and are ranked by their Euclidean distance."
+                    )
+                    features = [
+                        col
+                        for col in df_kproto.columns
+                        if col not in ["tmdb_id", "title", "cluster"]
+                    ]
+
+                    top_similar_movies_dist_df = recommend_similar_movies(
+                        df_kproto, ref_movie_df, features
+                    )
+                    top_similar_movies_df = df_kproto_final.merge(
+                        top_similar_movies_dist_df[
+                            ["tmdb_id", "distance_to_reference"]
+                        ],
+                        on="tmdb_id",
+                        how="right",
+                    )
+                    st.dataframe(
+                        top_similar_movies_df,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # st.header("Decision Tree Clustering")
+                    # st.subheader("Self-Organizing Maps (SOM)")
+
             else:
                 st.write("No correct or not enough data submitted.")
 
