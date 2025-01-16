@@ -10,7 +10,7 @@ from sklearn.metrics.pairwise import euclidean_distances
 @st.cache_data(
     ttl=datetime.timedelta(hours=12), show_spinner="K-Prototypes Clustering..."
 )
-def k_prototypes_clustering(df, categorical_columns, n_clusters=8):
+def k_prototypes_clustering(df, categorical_columns, n_clusters=8, id_column="tmdb_id"):
     """
     Applies K-Prototypes clustering algorithm to the data (both numerical and categorical features).
 
@@ -18,27 +18,28 @@ def k_prototypes_clustering(df, categorical_columns, n_clusters=8):
     - df: The prepared DataFrame with both numerical and categorical features.
     - categorical_columns: List of original categorical feature names.
     - n_clusters: Number of clusters to create.
+    - id_column: Name of the column to use as the unique identifier (default is "tmdb_id").
 
     Returns:
-    - df: DataFrame with assigned cluster labels, including 'tmdb_id' and 'title'.
+    - df: DataFrame with assigned cluster labels, including the ID column and 'title' if present.
     """
     print(f"\n{'='*50}")
     print(f"Started K-Prototypes clustering with {n_clusters} clusters.")
 
-    # Step 1: Keep 'tmdb_id' and 'title' columns for reference
+    # Step 1: Keep the ID column and 'title' column for reference
     reference_columns = (
-        df[["tmdb_id", "title"]]
-        if "tmdb_id" in df.columns and "title" in df.columns
+        df[[id_column, "title"]]
+        if id_column in df.columns and "title" in df.columns
         else None
     )
 
     # Step 2: Store the original order of the rows
     original_index = df.index
 
-    # Step 3: Drop 'tmdb_id' and 'title' columns for clustering
-    if "tmdb_id" in df.columns:
-        df = df.drop(columns=["tmdb_id"])
-        print("- Dropped 'tmdb_id' column")
+    # Step 3: Drop the ID column and 'title' column for clustering
+    if id_column in df.columns:
+        df = df.drop(columns=[id_column])
+        print(f"- Dropped '{id_column}' column")
 
     if "title" in df.columns:
         df = df.drop(columns=["title"])
@@ -65,14 +66,16 @@ def k_prototypes_clustering(df, categorical_columns, n_clusters=8):
     if reference_columns is not None:
         df = pd.concat([reference_columns, df], axis=1)
         df = df.set_index(original_index)  # Reset to original row order
-        print("- Added 'tmdb_id' and 'title' back to the DataFrame.")
+        print(f"- Added '{id_column}' and 'title' back to the DataFrame.")
 
     print(f"\n{'='*50}")
 
     return df
 
 
-def merge_clusters_with_preprocessed_df(preprocessed_df, clustered_df):
+def merge_clusters_with_preprocessed_df(
+    preprocessed_df, clustered_df, id_column="tmdb_id"
+):
     """
     Merges the cluster labels from the clustered DataFrame into the pre-processed DataFrame,
     and drops rows without a cluster assignment.
@@ -80,23 +83,28 @@ def merge_clusters_with_preprocessed_df(preprocessed_df, clustered_df):
     Parameters:
     - preprocessed_df: The original DataFrame with clear features.
     - clustered_df: The DataFrame after clustering with cluster labels.
+    - id_column: The column name used to identify and merge rows in both DataFrames (default: 'tmdb_id').
 
     Returns:
     - merged_df: The pre-processed DataFrame with an added 'cluster' column and no missing clusters.
     """
-    # Ensure both DataFrames have 'tmdb_id' column for merging
+    # Ensure both DataFrames have the specified ID column for merging
     if (
-        "tmdb_id" not in preprocessed_df.columns
-        or "tmdb_id" not in clustered_df.columns
+        id_column not in preprocessed_df.columns
+        or id_column not in clustered_df.columns
     ):
-        raise ValueError("Both DataFrames must have the 'tmdb_id' column for merging.")
+        raise ValueError(
+            f"Both DataFrames must have the '{id_column}' column for merging."
+        )
 
-    # Select only tmdb_id and cluster columns from the clustered DataFrame
-    cluster_mapping = clustered_df[["tmdb_id", "cluster"]]
+    # Select only the ID and cluster columns from the clustered DataFrame
+    cluster_mapping = clustered_df[[id_column, "cluster"]]
 
     # Merge the cluster labels into the preprocessed DataFrame
-    merged_df = preprocessed_df.merge(cluster_mapping, on="tmdb_id", how="left")
-    print("\nCluster column successfully merged into the preprocessed DataFrame.")
+    merged_df = preprocessed_df.merge(cluster_mapping, on=id_column, how="left")
+    print(
+        f"\nCluster column successfully merged into the preprocessed DataFrame using '{id_column}'."
+    )
 
     # Drop rows without a cluster assignment
     before_drop = merged_df.shape[0]
@@ -104,6 +112,7 @@ def merge_clusters_with_preprocessed_df(preprocessed_df, clustered_df):
     after_drop = merged_df.shape[0]
     print(f"Dropped {before_drop - after_drop} rows without a cluster assignment.")
 
+    # Convert the cluster column to integer
     merged_df["cluster"] = merged_df["cluster"].astype(int)
 
     # Add release_year column extracted from release_date
@@ -111,7 +120,7 @@ def merge_clusters_with_preprocessed_df(preprocessed_df, clustered_df):
         merged_df["release_year"] = pd.to_datetime(merged_df["release_date"]).dt.year
         print("Extracted 'release_year' from 'release_date' column.")
     else:
-        raise ValueError("'release_date' column not found in the merged DataFrame.")
+        print("'release_date' column not found in the merged DataFrame.")
 
     print(
         f"Merged DataFrame now has {merged_df.shape[0]} rows and {merged_df.shape[1]} columns."
@@ -176,31 +185,32 @@ def calculate_top_genres(df):
     return genre_df_pivot
 
 
-def recommend_similar_movies(df, df_reference, features, top_n=10):
+def recommend_similar_movies(df, df_reference, features, id_column="tmdb_id", top_n=10):
     """
     Recommend top N movies based on cluster proximity to a reference movie using preprocessed features.
 
     Args:
         df (pd.DataFrame): DataFrame containing movie data with clusters and features.
         df_reference (pd.DataFrame): The reference dataframe with the reference movie.
-        features (list): List of features used for comparison (exclude 'tmdb_id' and 'title').
+        features (list): List of features used for comparison (exclude 'id_column' and 'title').
+        id_column (str): The column name that holds the unique identifier (e.g., 'tmdb_id' or 'imdb_id').
         top_n (int): Number of top similar movies to recommend.
 
     Returns:
         pd.DataFrame: DataFrame with top N similar movies and their proximity scores.
     """
 
-    # Step 1: Get the tmdb_id of the reference movie from df_reference
-    reference_tmdb_id = df_reference["tmdb_id"].iloc[0]  # or use any specific row
+    # Step 1: Get the reference movie's ID from df_reference
+    reference_id = df_reference[id_column].iloc[0]  # or use any specific row
 
     # Step 2: Get the cluster of the reference movie
-    reference_cluster = df[df["tmdb_id"] == reference_tmdb_id]["cluster"].values[0]
+    reference_cluster = df[df[id_column] == reference_id]["cluster"].values[0]
 
     # Step 3: Filter all movies in the same cluster
     df_cluster = df[df["cluster"] == reference_cluster]
 
     # Step 4: Extract the feature vectors for the reference movie and the other movies in the same cluster
-    reference_features = df[df["tmdb_id"] == reference_tmdb_id][features].values
+    reference_features = df[df[id_column] == reference_id][features].values
 
     # Step 5: Calculate Euclidean distance between the reference movie and all movies in the same cluster
     distances = euclidean_distances(reference_features, df_cluster[features]).flatten()
@@ -211,4 +221,4 @@ def recommend_similar_movies(df, df_reference, features, top_n=10):
     # Step 7: Sort the movies by proximity (distance) and select top N closest movies
     top_recommendations = df_cluster.sort_values(by="distance_to_reference").head(top_n)
 
-    return top_recommendations[["tmdb_id", "title", "distance_to_reference"]]
+    return top_recommendations[[id_column, "title", "distance_to_reference"]]

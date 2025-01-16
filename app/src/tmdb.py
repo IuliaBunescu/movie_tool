@@ -1,13 +1,10 @@
 import datetime
-import os
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import tmdbsimple as tmdb
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-
-tmdb.API_KEY = os.getenv("TMDB_API_KEY")
 
 
 @st.cache_data(
@@ -221,7 +218,7 @@ def get_movies_by_genre_from_reference_df(
 @st.cache_data(
     ttl=datetime.timedelta(hours=12), show_spinner="Preparing data for clustering..."
 )
-def prepare_data_for_clustering(df):
+def prepare_tmdb_data_for_clustering(df):
     """
     Prepares a DataFrame for clustering by scaling numerical features and encoding categorical features.
 

@@ -18,19 +18,40 @@ def get_reference_from_url(imdb_url):
 
     # Check if data was found
     if movie_details:
+        # Transform genres and country_of_origin into comma-separated strings
+        genres = movie_details.get("genres", [])
+        if isinstance(genres, list):
+            genres = ", ".join(genres)
+        else:
+            genres = "N/A"
+
+        country_of_origin = movie_details.get("country_of_origin", [])
+        if isinstance(country_of_origin, list):
+            country_of_origin = ", ".join(country_of_origin)
+        else:
+            country_of_origin = "N/A"
+
+        # Extract the release year from the release_date
+        release_date = movie_details.get("release_date", "N/A")
+        if release_date != "N/A":
+            # Try to extract year if the release_date is a string that contains the year
+            try:
+                release_year = int(pd.to_datetime(release_date).year)
+            except Exception as e:
+                release_year = "N/A"  # In case of an error (invalid date format)
+        else:
+            release_year = "N/A"
+
         # Create DataFrame
         ref_movie_df = pd.DataFrame(
             [
                 {
                     "imdb_id": movie_details.get("imdb_id", "N/A"),
                     "title": movie_details.get("title", "N/A"),
-                    "description": movie_details.get("description", "N/A"),
-                    "release_date": movie_details.get("release_date", "N/A"),
-                    "rating": movie_details.get("rating", "N/A"),
+                    "release_year": release_year,
+                    "vote_average": movie_details.get("rating", "N/A"),
                     "vote_count": movie_details.get("vote_count", "N/A"),
-                    "genres": movie_details.get("genres", "N/A"),
-                    "original_language": movie_details.get("original_language", "N/A"),
-                    "country_of_origin": movie_details.get("country_of_origin", "N/A"),
+                    "genres": genres,
                 }
             ]
         )
@@ -57,6 +78,8 @@ def get_mean_values(df, decimal_places=2):
     stats = df.describe()
 
     mean_values = stats.loc["mean"]
+
+    print(mean_values)
 
     mean_values_rounded = mean_values.round(decimal_places)
 
