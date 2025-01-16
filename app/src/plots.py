@@ -29,10 +29,11 @@ def plot_categorical_column_percentages(dataframe, column_name):
     value_counts = (
         dataframe[column_name]
         .dropna()
-        .apply(lambda x: x.split(", ") if isinstance(x, str) else x)
-        .explode()
-        .value_counts(normalize=True)
-        .reset_index()
+        .apply(lambda x: x.split(",") if isinstance(x, str) else x)
+        .apply(lambda x: [item.strip() for item in x] if isinstance(x, list) else x)
+        .explode()  # Flatten lists into rows
+        .value_counts(normalize=True)  # Count occurrences
+        .reset_index()  # Reset index for easier plotting
     )
     value_counts.columns = ["Value", "Percentage"]
     value_counts["Percentage"] = (value_counts["Percentage"] * 100).round(2)
@@ -204,11 +205,13 @@ def plot_movies_by_year(df, date_column):
     Plots a line plot showing the number of movies released each year.
     Assumes that `df` has a `release_date` column with date values in 'YYYY-MM-DD' format.
     """
-    # Convert the release_date column to datetime format (if it's not already)
-    df[date_column] = pd.to_datetime(df[date_column])
-
-    # Extract the year from the release_date
-    df["Year"] = df[date_column].dt.year
+    # Check if the date_column is an integer (year)
+    if df[date_column].dtype in ["int64", "float64"]:  # Year as integer
+        df["Year"] = df[date_column].astype(int)
+    else:  # Assuming the date_column is a full date or datetime
+        # Convert to datetime format and extract the year
+        df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
+        df["Year"] = df[date_column].dt.year
 
     # Count the number of movies released each year
     movie_count_by_year = df.groupby("Year").size().reset_index(name="Movie Count")
@@ -311,8 +314,7 @@ def plot_cluster_comparison_subplots(
     # Create subplots for each metric
     fig = make_subplots(
         rows=1,
-        cols=3,  # 1 row, 3 columns
-        subplot_titles=numeric_columns,
+        cols=len(numeric_columns),  # 1 row, 3 columns
         shared_yaxes=False,  # Allow independent y-axes for each subplot
         horizontal_spacing=0.1,
     )
@@ -394,7 +396,7 @@ def plot_cluster_distribution_pie(df, cluster_column="cluster"):
     return fig
 
 
-@st.cache_data(ttl=datetime.timedelta(hours=6), show_spinner="Applying PCA...")
+@st.cache_data(ttl=datetime.timedelta(hours=12), show_spinner="Applying PCA...")
 def plot_clusters_with_pca(
     df,
     cluster_column="cluster",

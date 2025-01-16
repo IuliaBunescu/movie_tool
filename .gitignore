@@ -39,7 +39,7 @@ Thumbs.db
 # ignore specific folders and files #
 ######################
 .venv/
-/data/imdb_movie_titles.tsv
+/data/imdb_movies.csv
 /app/making_local_dataset.ipynb
 .env
 
