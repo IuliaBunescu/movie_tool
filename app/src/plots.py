@@ -312,7 +312,6 @@ def plot_cluster_comparison_subplots(
     fig = make_subplots(
         rows=1,
         cols=3,  # 1 row, 3 columns
-        subplot_titles=numeric_columns,
         shared_yaxes=False,  # Allow independent y-axes for each subplot
         horizontal_spacing=0.1,
     )
@@ -394,7 +393,7 @@ def plot_cluster_distribution_pie(df, cluster_column="cluster"):
     return fig
 
 
-@st.cache_data(ttl=datetime.timedelta(hours=6), show_spinner="Applying PCA...")
+@st.cache_data(ttl=datetime.timedelta(hours=12), show_spinner="Applying PCA...")
 def plot_clusters_with_pca(
     df,
     cluster_column="cluster",

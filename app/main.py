@@ -33,6 +33,10 @@ from src.tmdb import (
 st.set_page_config(layout="wide")
 
 
+def submit_form():
+    st.session_state.data_submitted = True
+
+
 def main():
     st.title("Movie Recommendation Tool for Data Scientists 🎬")
 
@@ -45,7 +49,10 @@ def main():
             "Choose your data input method by providing a **Reference Movie** and selecting one or more **Supporting Data Sources**. After adding all the required inputs, click the **Submit** button. Once submitted, proceed to the **Results** section to view your output."
         )
         st.markdown(
-            "As a recommendation, when using *TMDB* reference data, use *TMDB* supporting data as well. "
+            "**Recommendations**:\n"
+            "1. When using *TMDB* reference data, ensure that you also use *TMDB* supporting data.\n"
+            "2. When providing an IMDb link, use data from the local database.\n"
+            "3. If you choose to provide the supporting data yourself, make sure it includes all the necessary features corresponding to the reference data you selected."
         )
 
         # local database upload
@@ -54,7 +61,9 @@ def main():
 
         with st.form("input_form", enter_to_submit=False):
             st.write(CUSTOM_FORM, unsafe_allow_html=True)
-            data_submitted = False
+
+            if "data_submitted" not in st.session_state:
+                st.session_state.data_submitted = False
 
             st.subheader("Reference Movie")
 
@@ -135,44 +144,59 @@ def main():
             )
 
             if not ref_movie_df.empty:
-                st.success(f"Data for '{movie_name_tmdb_ref}' found using TMDB API.")
-                st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
-                movie_ref_tmdb = True
-                print(f"\n{'='*50}")
-                print(
-                    f"[{get_timestamp()}] Logging information about the TMDB reference movies DataFrame:"
-                )
-                ref_movie_df.info(
-                    verbose=True, buf=None, max_cols=None, memory_usage="deep"
-                )
-                print(f"{'='*50}\n")
-            elif data_submitted:
-                st.error(
-                    f"Reference movie '{movie_name_tmdb_ref}' data not found using TMDB API . Try other reference input options."
-                )
-                st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
+                if st.session_state.data_submitted:
+                    st.success(
+                        f"Data for '{movie_name_tmdb_ref}' found using TMDB API."
+                    )
+                    st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
+                    movie_ref_tmdb = True
+                    print(f"\n{'='*50}")
+                    print(
+                        f"[{get_timestamp()}] Logging information about the TMDB reference movies DataFrame:"
+                    )
+                    ref_movie_df.info(
+                        verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                    )
+                    print(f"{'='*50}\n")
+                elif st.session_state.data_submitted:
+                    st.error(
+                        f"Reference movie '{movie_name_tmdb_ref}' data not found using TMDB API . Try other reference input options."
+                    )
+                    st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
 
-            website_for_scraping = st.text_input(
-                "**Option 3**: Rotten Tomatoes or IMDB link "
-            )
+            website_for_scraping = st.text_input("**Option 3**: IMDB link ")
             movie_ref_url = False
 
-            if website_for_scraping:
-                url_ref_movie_dict = get_reference_from_url()
+            if website_for_scraping and st.session_state.data_submitted:
+                url_ref_movie_dict = get_reference_from_url(website_for_scraping)
                 if url_ref_movie_dict.get("found_movie_data_flag"):
                     st.success("Your website is valid.")
                     st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
                     movie_ref_url = True
-                else:
+                    ref_movie_df = url_ref_movie_dict.get("ref_movie_df")
+                elif st.session_state.data_submitted:
                     st.error(
-                        "Did not find movie data in refernece URL. Try other reference input options."
+                        "Did not find movie data in reference URL. Try other reference input options."
                     )
                     st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
 
             st.subheader("Supporting Data")
+            use_tmdb_api = False
+            use_local_db = False
+            reference_data_source = st.radio(
+                "Chose one of the following sources:",
+                ["TMDB API data", "Local db data", "None"],
+                horizontal=False,
+                key="reference_data_input",
+            )
+
+            if reference_data_source == "TMDB API data":
+                use_tmdb_api = True
+            else:
+                use_local_db = True
 
             uploaded_files = st.file_uploader(
-                "Choose CSV/TSV files",
+                "Add your own CSV/TSV files",
                 accept_multiple_files=True,
                 key="input_tabular_file",
             )
@@ -195,24 +219,13 @@ def main():
                     st.error(f"Unsupported file type: {uploaded_file.name}")
                     st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
 
-            use_tmdb_api = False
-            use_local_db = False
-            reference_data_source = st.radio(
-                "Chose one of the following sources or leave empty:",
-                ["TMDB API data", "Local db data"],
-                horizontal=False,
-                key="reference_data_input",
+            form_button = st.form_submit_button(
+                "Submit", use_container_width=True, on_click=submit_form
             )
-
-            if reference_data_source == "TMDB API data":
-                use_tmdb_api = True
-            else:
-                use_local_db = True
-
-            data_submitted = st.form_submit_button("Submit", use_container_width=True)
-
-        if data_submitted:
-            st.write("*Your input data was submitted!*")
+        if st.session_state.data_submitted:
+            st.write(f"*Your input data was submitted!*")
+        else:
+            st.write("Please fill out the input form.")
 
     with col2:
         st.header("Results", divider="gray")
@@ -226,7 +239,7 @@ def main():
             if (
                 (use_tmdb_api or use_local_db or dataframes)
                 and (movie_ref_url or movie_ref_local or movie_ref_tmdb)
-                and data_submitted
+                and st.session_state.data_submitted
             ):
 
                 st.subheader("Reference Movie Data")
@@ -336,7 +349,7 @@ def main():
             if (
                 (use_tmdb_api or use_local_db or dataframes)
                 and (movie_ref_url or movie_ref_local or movie_ref_tmdb)
-                and data_submitted
+                and st.session_state.data_submitted
             ):
                 if use_tmdb_api:
                     st.header("K-Prototypes Clustering")

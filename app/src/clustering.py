@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import euclidean_distances
 
 
 @st.cache_data(
-    ttl=datetime.timedelta(hours=6), show_spinner="K-Prototypes Clustering..."
+    ttl=datetime.timedelta(hours=12), show_spinner="K-Prototypes Clustering..."
 )
 def k_prototypes_clustering(df, categorical_columns, n_clusters=8):
     """
