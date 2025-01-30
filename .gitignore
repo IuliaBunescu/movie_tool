@@ -44,4 +44,4 @@ Thumbs.db
 .env
 /data/external_data_examples/
 .vscode/
-**/__pycache__/
+**/__pycache__/*
