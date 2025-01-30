@@ -42,4 +42,6 @@ Thumbs.db
 /data/imdb_movies.csv
 /app/making_local_dataset.ipynb
 .env
-
+/data/external_data_examples/
+.vscode/
+**/__pycache__/
