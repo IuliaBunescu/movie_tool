@@ -13,7 +13,7 @@ from src.components.custom_html import (
     CUSTOM_FORM,
     CUSTOM_METRIC,
 )
-from src.helper import get_mean_values, get_reference_from_url, get_timestamp
+from src.helper import get_mean_values, get_timestamp, process_uploaded_files
 from src.local import (
     load_local_db,
     prepare_local_data_for_clustering,
@@ -30,6 +30,7 @@ from src.plots import (
     plot_movies_by_year,
     plot_popularity_vs_vote,
 )
+from src.scraper import get_reference_from_url
 from src.tmdb import (
     get_movies_by_genre_from_reference_df,
     prepare_tmdb_data_for_clustering,
@@ -181,7 +182,7 @@ def main():
 
             if reference_data_source == "TMDB API data":
                 use_tmdb_api = True
-            else:
+            elif reference_data_source == "Local db data":
                 use_local_db = True
                 local_db = load_local_db("..\data\imdb_movies.csv")
 
@@ -191,25 +192,21 @@ def main():
                 key="input_tabular_file",
             )
 
-            dataframes = []
+            add_external_local_df = False
+            add_external_tmdb_df = False
 
-            for uploaded_file in uploaded_files:
-                # Determine the separator based on file extension
-                file_extension = uploaded_file.name.split(".")[-1]
-                if file_extension in ["csv", "tsv"]:
-                    separator = "," if file_extension == "csv" else "\t"
-                    # Read the file into a pandas dataframe
-                    df = pd.read_csv(uploaded_file, sep=separator)
-                    dataframes.append(df)
-                    st.success(
-                        f"Created Pandas dataframe from file {uploaded_file.name}."
-                    )
-                    st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
-                else:
-                    st.error(f"Unsupported file type: {uploaded_file.name}")
-                    st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
+            if uploaded_files and st.session_state.data_submitted:
 
-            form_button = st.form_submit_button(
+                external_data_dict = process_uploaded_files(uploaded_files)
+                external_df = external_data_dict.get("dataframe")
+                df_type = external_data_dict.get("type_flag")
+
+                if df_type == "local":
+                    add_external_local_df = True
+                elif df_type == "tmdb":
+                    add_external_tmdb_df = True
+
+            st.form_submit_button(
                 "Submit", use_container_width=True, on_click=submit_form
             )
         if st.session_state.data_submitted:
@@ -227,7 +224,12 @@ def main():
 
         with tab1:
             if (
-                (use_tmdb_api or use_local_db or dataframes)
+                (
+                    use_tmdb_api
+                    or use_local_db
+                    or add_external_local_df
+                    or add_external_tmdb_df
+                )
                 and (movie_ref_url or movie_ref_local or movie_ref_tmdb)
                 and st.session_state.data_submitted
             ):
@@ -235,21 +237,60 @@ def main():
                 st.subheader("Reference Movie Data")
                 st.dataframe(ref_movie_df, use_container_width=True, hide_index=True)
 
-                if use_tmdb_api:
-                    st.write(" ")
-                    st.write(
-                        "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
-                    )
+                if use_tmdb_api or add_external_tmdb_df:
+                    if use_tmdb_api:
+                        tmdb_movies_df = get_movies_by_genre_from_reference_df(
+                            ref_movie_df
+                        )
+                        print(f"\n{'='*50}")
+                        print(
+                            f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
+                        )
+                        tmdb_movies_df.info(
+                            verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                        )
+                        print(f"{'='*50}\n")
 
-                    tmdb_movies_df = get_movies_by_genre_from_reference_df(ref_movie_df)
-                    print(f"\n{'='*50}")
-                    print(
-                        f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
-                    )
-                    tmdb_movies_df.info(
-                        verbose=True, buf=None, max_cols=None, memory_usage="deep"
-                    )
-                    print(f"{'='*50}\n")
+                        if add_external_tmdb_df:
+                            tmdb_movies_df = pd.concat(
+                                [tmdb_movies_df, external_df],
+                                ignore_index=True,
+                            )
+                            st.write(" ")
+                            st.write(
+                                "The data is being sourced from *TMDB* and external files. From TMDB the initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
+                            )
+
+                            print(f"\n{'='*50}")
+                            print(
+                                f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
+                            )
+                            tmdb_movies_df.info(
+                                verbose=True,
+                                buf=None,
+                                max_cols=None,
+                                memory_usage="deep",
+                            )
+                            print(f"{'='*50}\n")
+
+                        else:
+                            st.write(" ")
+                            st.write(
+                                "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
+                            )
+
+                    elif add_external_tmdb_df:
+                        tmdb_movies_df = external_df
+                        st.write("The data is being sourced from the attached files.")
+
+                        print(f"\n{'='*50}")
+                        print(
+                            f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
+                        )
+                        tmdb_movies_df.info(
+                            verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                        )
+                        print(f"{'='*50}\n")
 
                     st.subheader("Metrics")
                     mean_metrics = get_mean_values(tmdb_movies_df)
@@ -330,19 +371,79 @@ def main():
                             plot_popularity_vs_vote(tmdb_movies_df),
                             use_container_width=True,
                         )
-                elif use_local_db:
-                    st.write("")
-                    st.write(
-                        "The data is being sourced from local database (IMDB). The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
-                    )
+                # elif use_local_db:
+                #     st.write("")
+                #     st.write(
+                #         "The data is being sourced from local database (IMDB). The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
+                #     )
 
-                    sampled_local_df = sample_local_df(
-                        local_db, ref_movie_df["genres"].iloc[0].split(",")
-                    )
-                    sampled_local_df = pd.concat(
-                        [sampled_local_df, ref_movie_df], axis=0, ignore_index=True
-                    )
-                    print(ref_movie_df.info())
+                #     sampled_local_df = sample_local_df(
+                #         local_db, ref_movie_df["genres"].iloc[0].split(",")
+                #     )
+                #     sampled_local_df = pd.concat(
+                #         [sampled_local_df, ref_movie_df], axis=0, ignore_index=True
+                #     )
+                #     print(ref_movie_df.info())
+
+                elif use_local_db or add_external_local_df:
+                    if use_local_db:
+                        sampled_local_df = sample_local_df(
+                            local_db, ref_movie_df["genres"].iloc[0].split(",")
+                        )
+                        sampled_local_df = pd.concat(
+                            [sampled_local_df, ref_movie_df], axis=0, ignore_index=True
+                        )
+                        print(f"\n{'='*50}")
+                        print(
+                            f"[{get_timestamp()}] Logging information about the local movies DataFrame:"
+                        )
+                        sampled_local_df.info(
+                            verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                        )
+                        print(f"{'='*50}\n")
+
+                        if add_external_local_df:
+                            sampled_local_df = pd.concat(
+                                sampled_local_df,
+                                external_df,
+                                on="tdb_id",
+                                ignore_index=True,
+                            )
+                            st.write(" ")
+                            st.write(
+                                "The data is being sourced from local db and external files. From local db the initial selection criterion is **genre**. Approximately 1K movies with similar genres will be sources to create a custom dataset for your analysis."
+                            )
+
+                            print(f"\n{'='*50}")
+                            print(
+                                f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
+                            )
+                            sampled_local_df.info(
+                                verbose=True,
+                                buf=None,
+                                max_cols=None,
+                                memory_usage="deep",
+                            )
+                            print(f"{'='*50}\n")
+
+                        else:
+                            st.write(" ")
+                            st.write(
+                                "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
+                            )
+
+                    elif add_external_local_df:
+                        sampled_local_df = external_df
+                        st.write("The data is being sourced from the attached files.")
+
+                        print(f"\n{'='*50}")
+                        print(
+                            f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
+                        )
+                        sampled_local_df.info(
+                            verbose=True, buf=None, max_cols=None, memory_usage="deep"
+                        )
+                        print(f"{'='*50}\n")
 
                     st.subheader("Metrics")
                     mean_metrics = get_mean_values(sampled_local_df)
@@ -376,18 +477,20 @@ def main():
                             plot_movies_by_year(sampled_local_df, "release_year"),
                             use_container_width=True,
                         )
-
-                # for df in dataframes:
-                #     st.dataframe(df.head(), use_container_width=True, hide_index=True)
             else:
                 st.write("No correct or not enough data submitted.")
         with tab2:
             if (
-                (use_tmdb_api or use_local_db or dataframes)
+                (
+                    use_tmdb_api
+                    or use_local_db
+                    or add_external_local_df
+                    or add_external_tmdb_df
+                )
                 and (movie_ref_url or movie_ref_local or movie_ref_tmdb)
                 and st.session_state.data_submitted
             ):
-                if use_tmdb_api:
+                if use_tmdb_api or add_external_tmdb_df:
                     st.header("K-Prototypes Clustering")
                     tmdb_movies_prepared_df = prepare_tmdb_data_for_clustering(
                         tmdb_movies_df
@@ -485,7 +588,7 @@ def main():
 
                     # st.header("Decision Tree Clustering")
                     # st.subheader("Self-Organizing Maps (SOM)")
-                elif use_local_db:
+                elif use_local_db or add_external_local_df:
                     st.header("K-Prototypes Clustering")
                     local_movies_prepared_df = prepare_local_data_for_clustering(
                         sampled_local_df
