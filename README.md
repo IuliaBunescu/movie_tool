@@ -6,6 +6,8 @@ Welcome to the Movie Recommendation Tool! This application helps users discover 
 
 Experience the app in action: [Movie Recommendation Tool](https://juliab-movie-recommendation-tool.streamlit.app/)
 
+**Note:** For the best experience, please set the Streamlit theme to 'Light' in the settings.
+
 ## Features
 
 - **Personalized Recommendations**: Get movie suggestions based on your unique interests.
