@@ -21,7 +21,7 @@ To run the application locally:
 
    ```bash
    git clone https://github.com/IuliaBunescu/movie_tool.git
-   cd movie_tool
+   cd movie_tool/app
    ```
 
 2. **Install Dependencies**:
