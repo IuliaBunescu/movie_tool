@@ -1,4 +1,5 @@
 import datetime
+import re
 
 import numpy as np
 import pandas as pd
@@ -312,3 +313,34 @@ def prepare_tmdb_data_for_clustering(df):
     print(f"Dataset preparation completed.")
 
     return transformed_df
+
+
+def extract_tmdb_id(tmdb_url):
+    """
+    Extracts the TMDB movie or TV show ID from a given TMDB URL and retrieves movie details.
+
+    Args:
+    tmdb_url (str): The URL of a TMDB movie or TV show.
+
+    Returns:
+    dict: A dictionary containing:
+        - 'found_movie_data_flag' (bool): True if a movie ID was found, False otherwise.
+        - 'ref_movie_df' (DataFrame or None): A DataFrame with movie details if available, None otherwise.
+    """
+    # Extract the movie or TV show ID from the URL
+    match = re.search(r"(movie|tv)/(\d+)", tmdb_url)
+    movie_id = match.group(2) if match else None
+
+    # Initialize the response dictionary
+    result = {"found_movie_data_flag": False, "ref_movie_df": None}
+
+    if movie_id:
+        # Get movie details using the extracted ID
+        ref_movie_dic = get_movie_details_by_id(int(movie_id))
+        if ref_movie_dic:
+            # Convert movie details to DataFrame if available
+            ref_movie_df = pd.DataFrame([ref_movie_dic])
+            result["found_movie_data_flag"] = True
+            result["ref_movie_df"] = ref_movie_df
+
+    return result
