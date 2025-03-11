@@ -54,9 +54,6 @@ def main():
 
             st.subheader("Reference Movie")
 
-            # Initialize the variable for movie reference in local DB
-            movie_ref_local = False
-
             st.write("**Option 1**: Search reference using TMDB API.")
             movie_ref_tmdb = False
             ds3, ds4 = st.columns([3, 1])
