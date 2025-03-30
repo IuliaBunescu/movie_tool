@@ -153,25 +153,25 @@ def main():
                 m1, m2, m3, m4 = st.columns(4, vertical_alignment="center")
                 m1.metric(
                     "Average Rating",
-                    f"{mean_metrics.iloc[1]}#",
+                    f"{mean_metrics.iloc[1]:,.2f}#",
                     border=True,
                     help="Average rating for the movies in the dataset.",
                 )
                 m2.metric(
                     "Average Vote Count",
-                    f"{mean_metrics.iloc[2]}#",
+                    f"{mean_metrics.iloc[2]:,.2f}#",
                     border=True,
                     help="Average vote count for the movies in the dataset.",
                 )
                 m3.metric(
                     "Average Popularity",
-                    f"{mean_metrics.iloc[3]}#",
+                    f"{mean_metrics.iloc[3]:,.2f}#",
                     border=True,
                     help="Average popularity score for the movies in the dataset.",
                 )
                 m4.metric(
                     "% of IMDB movies",
-                    f"{(tmdb_movies_df['imdb_id'].notnull().sum() / len(tmdb_movies_df) * 100):.2f} %",
+                    f"{(tmdb_movies_df['imdb_id'].notnull().sum() / len(tmdb_movies_df) * 100):,.2f} %",
                     border=True,
                     help="Percentage of movies that have IMDB id.",
                 )
