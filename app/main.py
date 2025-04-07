@@ -6,14 +6,8 @@ from src.clustering import (
     merge_clusters_with_preprocessed_df,
     recommend_similar_movies,
 )
-from src.components.custom_html import (
-    CUSTOM_ALERT_ERROR,
-    CUSTOM_ALERT_SUCCESS,
-    CUSTOM_BARS_TAB,
-    CUSTOM_FORM,
-    CUSTOM_METRIC,
-)
-from src.helper import get_mean_values, get_timestamp
+from src.components.custom_html import CUSTOM_BARS_TAB, CUSTOM_FORM, CUSTOM_METRIC
+from src.helper import get_median_values, get_timestamp
 from src.plots import (
     plot_categorical_column_percentages,
     plot_cluster_comparison_subplots,
@@ -21,8 +15,18 @@ from src.plots import (
     plot_clusters_with_pca,
     plot_column_distribution_pie,
     plot_country_counts,
+    plot_median_popularity_by_year,
     plot_movies_by_year,
     plot_popularity_vs_vote,
+    plot_top_bigrams,
+    plot_votes_vs_score,
+    plot_word_cloud,
+)
+from src.text_column_processing import (
+    check_and_download_nltk_resources,
+    clean_text,
+    get_most_common_words,
+    get_top_bigrams,
 )
 from src.tmdb import (
     extract_tmdb_id,
@@ -79,7 +83,6 @@ def main():
                         st.success(
                             f"Data for '{movie_name_tmdb_ref}' found using TMDB API."
                         )
-                        st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
                         movie_ref_tmdb = True
                         print(f"\n{'='*50}")
                         print(
@@ -93,7 +96,6 @@ def main():
                         st.error(
                             f"Reference movie '{movie_name_tmdb_ref}' data not found using TMDB API . Try other reference input options."
                         )
-                        st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
 
             website_for_scraping = st.text_input("**Option 2**: TMDB link ")
             movie_ref_url = False
@@ -102,22 +104,20 @@ def main():
                 url_ref_movie_dict = extract_tmdb_id(website_for_scraping)
                 if url_ref_movie_dict.get("found_movie_data_flag"):
                     st.success("Your website is valid.")
-                    st.write(CUSTOM_ALERT_SUCCESS, unsafe_allow_html=True)
                     movie_ref_url = True
                     ref_movie_df = url_ref_movie_dict.get("ref_movie_df")
                 elif st.session_state.data_submitted:
                     st.error(
                         "Did not find movie data in reference URL. Try other reference input options."
                     )
-                    st.write(CUSTOM_ALERT_ERROR, unsafe_allow_html=True)
 
             st.form_submit_button(
                 "Submit", use_container_width=True, on_click=submit_form
             )
         if st.session_state.data_submitted:
-            st.write(f"*Your input data was submitted!*")
+            st.info(f"*Your input data was submitted!*")
         else:
-            st.write("Please fill out the input form.")
+            st.warning("Please fill out the input form.")
 
     with col2:
         st.header("Results", divider="gray")
@@ -148,30 +148,30 @@ def main():
                 print(f"{'='*50}\n")
 
                 st.subheader("Metrics")
-                mean_metrics = get_mean_values(tmdb_movies_df)
+                mean_metrics = get_median_values(tmdb_movies_df)
 
                 m1, m2, m3, m4 = st.columns(4, vertical_alignment="center")
                 m1.metric(
-                    "Average Rating",
-                    f"{mean_metrics.iloc[1]}#",
+                    "Median Average Rating",
+                    f"{mean_metrics.iloc[1]:,.2f}#",
                     border=True,
-                    help="Average rating for the movies in the dataset.",
+                    help="Median average rating for the movies in the dataset.",
                 )
                 m2.metric(
-                    "Average Vote Count",
-                    f"{mean_metrics.iloc[2]}#",
+                    "Median Vote Count",
+                    f"{mean_metrics.iloc[2]:,.2f}#",
                     border=True,
-                    help="Average vote count for the movies in the dataset.",
+                    help="Median vote count for the movies in the dataset.",
                 )
                 m3.metric(
-                    "Average Popularity",
-                    f"{mean_metrics.iloc[3]}#",
+                    "Median Popularity Score",
+                    f"{mean_metrics.iloc[3]:,.2f}#",
                     border=True,
-                    help="Average popularity score for the movies in the dataset.",
+                    help="Median popularity score for the movies in the dataset.",
                 )
                 m4.metric(
                     "% of IMDB movies",
-                    f"{(tmdb_movies_df['imdb_id'].notnull().sum() / len(tmdb_movies_df) * 100):.2f} %",
+                    f"{(tmdb_movies_df['imdb_id'].notnull().sum() / len(tmdb_movies_df) * 100):,.2f} %",
                     border=True,
                     help="Percentage of movies that have IMDB id.",
                 )
@@ -225,8 +225,46 @@ def main():
                         plot_popularity_vs_vote(tmdb_movies_df),
                         use_container_width=True,
                     )
+                release_year_vs_popularity_col, vote_avg_vs_counts_col = st.columns(2)
+                with release_year_vs_popularity_col:
+                    st.subheader("Median TMDB Popularity Score Yearly Distribution")
+                    st.plotly_chart(
+                        plot_median_popularity_by_year(tmdb_movies_df),
+                        use_container_width=True,
+                    )
+                with vote_avg_vs_counts_col:
+                    st.subheader("Average Rating VS Vote Counts")
+                    st.plotly_chart(
+                        plot_votes_vs_score(tmdb_movies_df),
+                        use_container_width=True,
+                    )
+
+                wordcloud_col, top_bigrams_col = st.columns(2)
+                check_and_download_nltk_resources()
+
+                # Clean text column and get word and bigram frequency
+                tmdb_movies_df["cleaned_overview"] = tmdb_movies_df["overview"].apply(
+                    clean_text
+                )
+                common_words = get_most_common_words(
+                    tmdb_movies_df["cleaned_overview"], top_n=100
+                )
+                top_bigrams = get_top_bigrams(
+                    tmdb_movies_df["cleaned_overview"], top_n=20
+                )
+
+                with wordcloud_col:
+                    st.subheader("Most Frequent 100 Words")
+                    st.pyplot(plot_word_cloud(common_words), use_container_width=True)
+
+                with top_bigrams_col:
+                    st.subheader("Most Frequent 20 Bigrams")
+                    st.plotly_chart(
+                        plot_top_bigrams(top_bigrams), use_container_width=True
+                    )
+
             else:
-                st.write("No correct or not enough data submitted.")
+                st.info("No correct or not enough data submitted.")
         with tab2:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
 

@@ -1,11 +1,13 @@
 import datetime
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
+from wordcloud import WordCloud
 
 
 def plot_categorical_column_percentages(dataframe, column_name):
@@ -289,6 +291,113 @@ def plot_popularity_vs_vote(
     return fig
 
 
+def plot_votes_vs_score(
+    df,
+    vote_average_column="vote_average",
+    vote_count_column="vote_count",
+    color_by="popularity",
+):
+    """
+    Plots a scatter plot comparing the vote average (x-axis) and vote count (y-axis) for each movie.
+    Points are colored by a third metric, typically popularity.
+
+    Parameters:
+    - df: DataFrame containing the movie data.
+    - vote_average_column: Column name for the vote average (x-axis).
+    - vote_count_column: Column name for the vote count (y-axis).
+    - color_by: Column name to use for coloring the points (e.g., 'popularity').
+    """
+    # Ensure numeric types
+    df[vote_average_column] = pd.to_numeric(df[vote_average_column], errors="coerce")
+    df[vote_count_column] = pd.to_numeric(df[vote_count_column], errors="coerce")
+    df[color_by] = pd.to_numeric(df[color_by], errors="coerce")
+
+    # Drop rows with missing values
+    df = df.dropna(subset=[vote_average_column, vote_count_column, color_by])
+
+    # Plot
+    fig = px.scatter(
+        df,
+        x=vote_average_column,
+        y=vote_count_column,
+        color=color_by,
+        color_continuous_scale=px.colors.sequential.Agsunset,
+        labels={
+            vote_average_column: "Vote Average",
+            vote_count_column: "Vote Count",
+            color_by: "Popularity Score",
+        },
+        hover_data=[vote_average_column, vote_count_column, color_by],
+        marginal_x="histogram",
+    )
+
+    fig.update_layout(
+        xaxis_title="Vote Average (0–10)", yaxis_title="Vote Count", showlegend=False
+    )
+
+    return fig
+
+
+def plot_median_popularity_by_year(
+    df, date_column="release_date", popularity_column="popularity"
+):
+    """
+    Plots a line graph showing the evolution of median popularity score per year.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing movie data.
+        date_column (str): Name of the column with release dates (e.g., 'release_date').
+        popularity_column (str): Name of the column with popularity scores.
+
+    Returns:
+        fig: A Plotly line plot showing median popularity per year.
+    """
+    # Convert dates to datetime if needed and extract year
+    if df[date_column].dtype in ["int64", "float64"]:
+        df["Year"] = df[date_column].astype(int)
+    else:
+        df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
+        df["Year"] = df[date_column].dt.year
+
+    # Ensure popularity is numeric
+    df[popularity_column] = pd.to_numeric(df[popularity_column], errors="coerce")
+
+    # Group by year and compute median popularity
+    median_popularity_by_year = (
+        df.dropna(subset=["Year", popularity_column])
+        .groupby("Year")[popularity_column]
+        .median()
+        .reset_index(name="Median Popularity")
+    )
+
+    # Plot it
+    fig = px.line(
+        median_popularity_by_year,
+        x="Year",
+        y="Median Popularity",
+        markers=True,
+        labels={"Year": "Release Year", "Median Popularity": "Median Popularity Score"},
+    )
+
+    fig.update_traces(line=dict(color="#e60000"))
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=30, b=0),
+        hoverlabel=dict(font=dict(size=14)),
+        xaxis=dict(
+            titlefont=dict(size=16),
+            tickfont=dict(size=14),
+        ),
+        yaxis=dict(
+            titlefont=dict(size=16),
+            tickfont=dict(size=14),
+        ),
+        hovermode="x unified",
+    )
+
+    return fig
+
+
 def plot_cluster_comparison_subplots(
     df,
     cluster_column="cluster",
@@ -434,6 +543,62 @@ def plot_clusters_with_pca(
         hover_data={id_column: True, title_column: True},
         labels={"PCA_1": "Principal Component 1", "PCA_2": "Principal Component 2"},
         color_discrete_sequence=px.colors.sequential.Agsunset,
+    )
+
+    return fig
+
+
+def plot_word_cloud(word_freq, max_words=100):
+    """
+    Plots a word cloud from a word frequency dictionary.
+
+    Args:
+        word_freq (dict or list of tuples): Word frequency data.
+        max_words (int): Max number of words to display in the word cloud.
+        title (str): Title of the word cloud plot.
+    """
+    # Convert list of tuples to dict if needed
+    if isinstance(word_freq, list):
+        word_freq = dict(word_freq)
+
+    wordcloud = WordCloud(
+        width=800,
+        height=400,
+        background_color="white",
+        colormap="PuRd_r",
+        max_words=max_words,
+    ).generate_from_frequencies(word_freq)
+
+    plt.imshow(wordcloud, interpolation="bilinear")
+    plt.axis("off")
+    return plt
+
+
+def plot_top_bigrams(bigram_counts):
+    """
+    Plots the most common bigrams as an interactive horizontal bar chart using Plotly.
+
+    Args:
+        bigram_counts (list of tuples): Output from get_top_bigrams.
+    """
+    bigrams, counts = zip(*bigram_counts)
+
+    fig = px.bar(
+        x=counts,
+        y=bigrams,
+        orientation="h",
+        labels={"x": "Frequency", "y": "Bigram"},
+        color=counts,
+        color_continuous_scale=px.colors.sequential.Magenta,
+    )
+
+    fig.update_layout(
+        yaxis=dict(
+            categoryorder="total ascending",
+            tickfont=dict(size=12),
+            automargin=True,  # ensures no labels are cut off
+        ),
+        margin=dict(l=0, r=0, t=0, b=0),
     )
 
     return fig
