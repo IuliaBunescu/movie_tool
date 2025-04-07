@@ -143,6 +143,109 @@ def get_movie_ids_by_genres(genre_names, max_results=1000):
     return movie_ids
 
 
+def get_movie_ids_by_genres_decade_weighted(
+    genre_names, max_results=1000, start_year=1950, end_year=2024
+):
+    """
+    Retrieve a set of movie IDs from TMDB, filtered by genre, with results distributed across decades
+    to reduce recency bias and improve temporal diversity.
+
+    This function divides the specified time range into decades (e.g., 1990s, 2000s), dynamically assesses
+    how many qualifying movies exist in each decade, and proportionally allocates the number of results
+    to fetch from each based on that availability.
+
+    It prioritizes quality by default (using vote_average sorting), ensures movies have at least 100 votes,
+    and fills in with additional results if the requested amount is not met.
+
+    Args:
+        genre_names (list of str): List of genre names (e.g., ["Drama", "Adventure"]).
+        max_results (int): Total number of movie IDs to return (default is 1000).
+        start_year (int): Start year of the search range (default is 1950).
+        end_year (int): End year of the search range (default is 2024).
+
+    Returns:
+        set: A set of unique movie IDs distributed across decades.
+    """
+
+    genre_list = tmdb.Genres().movie_list()["genres"]
+    genre_ids = [
+        genre["id"]
+        for genre in genre_list
+        if genre["name"].lower() in [name.lower() for name in genre_names]
+    ]
+
+    if not genre_ids:
+        print(f"One or more genres from {genre_names} not found.")
+        return set()
+
+    discover = tmdb.Discover()
+    movie_ids = set()
+
+    # Define decades
+    decades = list(range(start_year, end_year + 1, 10))
+    decade_totals = {}
+
+    # Step 1: Determine how many pages of movies exist per decade (proxy for availability)
+    print("Analyzing decade availability...")
+    for decade_start in decades:
+        response = discover.movie(
+            with_genres=",".join(map(str, genre_ids)),
+            vote_count_gte=100,
+            primary_release_date_gte=f"{decade_start}-01-01",
+            primary_release_date_lte=f"{min(decade_start + 9, end_year)}-12-31",
+            page=1,
+        )
+        total_results = response.get("total_results", 0)
+        decade_totals[decade_start] = total_results
+
+    # Step 2: Normalize weights
+    total_available = sum(decade_totals.values())
+    if total_available == 0:
+        print("No movies found across selected decades.")
+        return set()
+
+    decade_allocations = {
+        decade: max(1, int((count / total_available) * max_results))
+        for decade, count in decade_totals.items()
+    }
+
+    # Step 3: Collect results per decade
+    for decade_start, num_to_fetch in decade_allocations.items():
+        print(f"Fetching {num_to_fetch} from {decade_start}s...")
+        page = 1
+        collected_ids = set()
+
+        while len(collected_ids) < num_to_fetch:
+            response = discover.movie(
+                with_genres=",".join(map(str, genre_ids)),
+                vote_count_gte=100,
+                primary_release_date_gte=f"{decade_start}-01-01",
+                primary_release_date_lte=f"{min(decade_start + 9, end_year)}-12-31",
+                sort_by="vote_average.desc",  # optional: prioritize quality
+                page=page,
+            )
+
+            collected_ids.update([movie["id"] for movie in response["results"]])
+
+            if page >= response["total_pages"]:
+                break
+            page += 1
+
+        movie_ids.update(list(collected_ids)[:num_to_fetch])
+
+    # Pad if underfilled
+    if len(movie_ids) < max_results:
+        print(
+            f"Only collected {len(movie_ids)} movies. Filling remaining with OR search."
+        )
+        fallback = get_movie_ids_by_genres(
+            genre_names, max_results=max_results - len(movie_ids)
+        )
+        movie_ids.update(fallback)
+
+    return movie_ids
+
+
 def get_movie_details_by_id(movie_id):
     """
     Fetch the movie details by its TMDB ID.
@@ -172,7 +275,8 @@ def get_movie_details_by_id(movie_id):
 
 
 @st.cache_data(
-    ttl=datetime.timedelta(hours=12), show_spinner="Getting custom data ready..."
+    ttl=datetime.timedelta(hours=12),
+    show_spinner="Getting custom dataset ready (can take up to 3 minutes)...",
 )
 def get_movies_by_genre_from_reference_df(
     reference_df, filter_column="genres", max_results=1000
@@ -191,7 +295,7 @@ def get_movies_by_genre_from_reference_df(
         .unique()
     )
     # Get movie IDs by using the genres from the reference DataFrame
-    movie_ids = get_movie_ids_by_genres(genres, max_results)
+    movie_ids = get_movie_ids_by_genres_decade_weighted(genres, max_results)
 
     print(f"\n{'='*50}")
     print(f"Gathered {len(movie_ids)} movie ids with similar genres.")
@@ -217,7 +321,8 @@ def get_movies_by_genre_from_reference_df(
 
 
 @st.cache_data(
-    ttl=datetime.timedelta(hours=12), show_spinner="Preparing data for clustering..."
+    ttl=datetime.timedelta(hours=12),
+    show_spinner="Preparing data for clustering ...",
 )
 def prepare_tmdb_data_for_clustering(df):
     """

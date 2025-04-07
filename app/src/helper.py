@@ -2,7 +2,6 @@ import datetime
 
 import pandas as pd
 import streamlit as st
-from src.components.custom_html import CUSTOM_ALERT_ERROR, CUSTOM_ALERT_SUCCESS
 
 
 def get_timestamp():
@@ -10,15 +9,18 @@ def get_timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def get_mean_values(df, decimal_places=2):
-    """Returns the mean values of numeric columns from the DataFrame."""
+def get_median_values(df, decimal_places=2):
+    """Returns the median values (50th percentile) of numeric columns from the DataFrame."""
 
     stats = df.describe()
 
-    mean_values = stats.loc["mean"]
+    # Extract median values (50th percentile)
+    median_values = stats.loc["50%"]
 
-    print(mean_values)
+    # Print the median values
+    print(median_values)
 
-    mean_values_rounded = mean_values.round(decimal_places)
+    # Round the median values to the specified decimal places
+    median_values_rounded = median_values.round(decimal_places)
 
-    return mean_values_rounded
+    return median_values_rounded
