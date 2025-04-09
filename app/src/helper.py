@@ -24,3 +24,9 @@ def get_median_values(df, decimal_places=2):
     median_values_rounded = median_values.round(decimal_places)
 
     return median_values_rounded
+
+
+# Function to load CSS from the 'assets' folder
+def load_css(file_path):
+    with open(file_path) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)

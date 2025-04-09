@@ -1,3 +1,5 @@
+import pathlib
+
 import pandas as pd
 import streamlit as st
 from src.clustering import (
@@ -7,15 +9,15 @@ from src.clustering import (
     recommend_similar_movies,
 )
 from src.components.custom_html import CUSTOM_BARS_TAB, CUSTOM_FORM, CUSTOM_METRIC
-from src.helper import get_median_values, get_timestamp
+from src.helper import get_median_values, get_timestamp, load_css
 from src.plots import (
+    plot_average_popularity_by_year,
     plot_categorical_column_percentages,
     plot_cluster_comparison_subplots,
     plot_cluster_distribution_pie,
     plot_clusters_with_pca,
     plot_column_distribution_pie,
     plot_country_counts,
-    plot_median_popularity_by_year,
     plot_movies_by_year,
     plot_popularity_vs_vote,
     plot_top_bigrams,
@@ -37,6 +39,9 @@ from src.tmdb import (
 
 st.set_page_config(layout="wide")
 
+css_path = pathlib.Path("assets/style.css")
+load_css(css_path)
+
 
 def submit_form():
     st.session_state.data_submitted = True
@@ -51,16 +56,16 @@ def main():
         st.header("Movie Input", divider="gray")
 
         with st.form("input_form", enter_to_submit=False):
-            st.write(CUSTOM_FORM, unsafe_allow_html=True)
 
-            if "data_submitted" not in st.session_state:
+            if "initialized" not in st.session_state:
                 st.session_state.data_submitted = False
+                st.session_state.initialized = True
 
             st.subheader("Reference Movie")
 
             st.write("**Option 1**: Search reference using TMDB API.")
             movie_ref_tmdb = False
-            ds3, ds4 = st.columns([3, 1])
+            ds3, ds4 = st.columns([2, 1])
 
             with ds3:
                 movie_name_tmdb_ref = st.text_input(
@@ -78,8 +83,9 @@ def main():
                 ref_movie_df = search_first_movie_by_title_and_year_tmdb(
                     movie_name_tmdb_ref, movie_year_tmdb_ref
                 )
-                if not ref_movie_df.empty:
-                    if st.session_state.data_submitted:
+
+                if st.session_state.data_submitted:
+                    if not ref_movie_df.empty:
                         st.success(
                             f"Data for '{movie_name_tmdb_ref}' found using TMDB API."
                         )
@@ -92,9 +98,9 @@ def main():
                             verbose=True, buf=None, max_cols=None, memory_usage="deep"
                         )
                         print(f"{'='*50}\n")
-                    elif st.session_state.data_submitted:
+                    else:
                         st.error(
-                            f"Reference movie '{movie_name_tmdb_ref}' data not found using TMDB API . Try other reference input options."
+                            f"*Reference movie '{movie_name_tmdb_ref}' data not found using TMDB API . Try other reference input options.*"
                         )
 
             website_for_scraping = st.text_input("**Option 2**: TMDB link ")
@@ -125,11 +131,11 @@ def main():
         tab1, tab2 = st.tabs(
             ["Exploratory Visualization of Data", "Clustering & Recommendations"]
         )
-        st.write(CUSTOM_BARS_TAB, unsafe_allow_html=True)
 
         with tab1:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
 
+                st.session_state.data_submitted = False
                 st.subheader("Reference Movie Data")
                 st.dataframe(ref_movie_df, use_container_width=True, hide_index=True)
 
@@ -175,7 +181,6 @@ def main():
                     border=True,
                     help="Percentage of movies that have IMDB id.",
                 )
-                st.write(CUSTOM_METRIC, unsafe_allow_html=True)
                 genre_col, lang_col = st.columns(2)
                 with genre_col:
                     st.subheader("Genre Distribution")
@@ -227,9 +232,9 @@ def main():
                     )
                 release_year_vs_popularity_col, vote_avg_vs_counts_col = st.columns(2)
                 with release_year_vs_popularity_col:
-                    st.subheader("Median TMDB Popularity Score Yearly Distribution")
+                    st.subheader("Average TMDB Popularity Score Yearly Distribution")
                     st.plotly_chart(
-                        plot_median_popularity_by_year(tmdb_movies_df),
+                        plot_average_popularity_by_year(tmdb_movies_df),
                         use_container_width=True,
                     )
                 with vote_avg_vs_counts_col:
@@ -264,7 +269,7 @@ def main():
                     )
 
             else:
-                st.info("No correct or not enough data submitted.")
+                st.info("*Please complete input section.*")
         with tab2:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
 
@@ -365,7 +370,7 @@ def main():
                 # st.subheader("Self-Organizing Maps (SOM)")
 
             else:
-                st.write("No correct or not enough data submitted.")
+                st.info("*Please complete input section.*")
 
 
 if __name__ == "__main__":

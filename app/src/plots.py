@@ -338,11 +338,11 @@ def plot_votes_vs_score(
     return fig
 
 
-def plot_median_popularity_by_year(
+def plot_average_popularity_by_year(
     df, date_column="release_date", popularity_column="popularity"
 ):
     """
-    Plots a line graph showing the evolution of median popularity score per year.
+    Plots a line graph showing the evolution of average popularity score per year.
 
     Args:
         df (pd.DataFrame): DataFrame containing movie data.
@@ -350,7 +350,7 @@ def plot_median_popularity_by_year(
         popularity_column (str): Name of the column with popularity scores.
 
     Returns:
-        fig: A Plotly line plot showing median popularity per year.
+        fig: A Plotly line plot showing average popularity per year.
     """
     # Convert dates to datetime if needed and extract year
     if df[date_column].dtype in ["int64", "float64"]:
@@ -362,21 +362,24 @@ def plot_median_popularity_by_year(
     # Ensure popularity is numeric
     df[popularity_column] = pd.to_numeric(df[popularity_column], errors="coerce")
 
-    # Group by year and compute median popularity
+    # Group by year and compute average popularity
     median_popularity_by_year = (
         df.dropna(subset=["Year", popularity_column])
         .groupby("Year")[popularity_column]
-        .median()
-        .reset_index(name="Median Popularity")
+        .mean()
+        .reset_index(name="Average Popularity")
     )
 
     # Plot it
     fig = px.line(
         median_popularity_by_year,
         x="Year",
-        y="Median Popularity",
+        y="Average Popularity",
         markers=True,
-        labels={"Year": "Release Year", "Median Popularity": "Median Popularity Score"},
+        labels={
+            "Year": "Release Year",
+            "Average Popularity": "Average Popularity Score",
+        },
     )
 
     fig.update_traces(line=dict(color="#e60000"))

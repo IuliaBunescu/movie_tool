@@ -1,0 +1,49 @@
+.stForm {
+    background: #ffd3d4;
+    border: 1px solid rgba(0, 0, 0, 0.0);
+}
+
+.stMetric {
+    background: #ffd3d4;
+    border: 1px solid rgba(0, 0, 0, 0.0);
+}
+
+.stTabs [data-baseweb="tab"] {
+    background: rgba(255, 211, 212, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.0);
+    border-radius: 0.5rem;
+    font-size: 24px;
+    width: 100%;
+}
+
+.stTabs [data-baseweb="tab"] p {
+    font-size: 1rem;
+}
+
+.stAlertContainer{
+    padding: 0;
+}
+
+.stAlertContainer [data-testid="stAlertContentSuccess"] {
+    background-color: #a6edcd !important;
+    padding: 1rem;
+    border-radius:  0.5rem;
+}
+
+.stAlertContainer [data-testid="stAlertContentInfo"] {
+    background-color: rgba(28, 131, 225, 0.3);
+    padding: 1rem;
+    border-radius:  0.5rem;
+}
+
+.stAlertContainer [data-testid="stAlertContentWarning"] {
+    background-color: rgba(255, 227, 18, 0.3);
+    padding: 1rem;
+    border-radius:  0.5rem;
+}
+
+.stAlertContainer [data-testid="stAlertContentError"] {
+    background-color: rgba(255, 43, 43, 0.5);
+    padding: 1rem;
+    border-radius:  0.5rem;
+}
