@@ -1,6 +1,5 @@
 import pathlib
 
-import pandas as pd
 import streamlit as st
 from src.clustering import (
     calculate_top_genres,
@@ -8,7 +7,6 @@ from src.clustering import (
     merge_clusters_with_preprocessed_df,
     recommend_similar_movies,
 )
-from src.components.custom_html import CUSTOM_BARS_TAB, CUSTOM_FORM, CUSTOM_METRIC
 from src.helper import get_median_values, get_timestamp, load_css
 from src.plots import (
     plot_average_popularity_by_year,
@@ -24,6 +22,7 @@ from src.plots import (
     plot_votes_vs_score,
     plot_word_cloud,
 )
+from src.preprocessing import prepare_data_for_clustering
 from src.text_column_processing import (
     check_and_download_nltk_resources,
     clean_text,
@@ -33,7 +32,6 @@ from src.text_column_processing import (
 from src.tmdb import (
     extract_tmdb_id,
     get_movies_by_genre_from_reference_df,
-    prepare_tmdb_data_for_clustering,
     search_first_movie_by_title_and_year_tmdb,
 )
 
@@ -135,7 +133,6 @@ def main():
         with tab1:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
 
-                st.session_state.data_submitted = False
                 st.subheader("Reference Movie Data")
                 st.dataframe(ref_movie_df, use_container_width=True, hide_index=True)
 
@@ -269,14 +266,12 @@ def main():
                     )
 
             else:
-                st.info("*Please complete input section.*")
+                st.info("*Please complete the input section.*")
         with tab2:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
 
                 st.header("K-Prototypes Clustering")
-                tmdb_movies_prepared_df = prepare_tmdb_data_for_clustering(
-                    tmdb_movies_df
-                )
+                tmdb_movies_prepared_df = prepare_data_for_clustering(tmdb_movies_df)
                 st.write("Using default hyperparameters (8 clusters).")
                 categorical_columns = [
                     "original_language",
@@ -370,7 +365,7 @@ def main():
                 # st.subheader("Self-Organizing Maps (SOM)")
 
             else:
-                st.info("*Please complete input section.*")
+                st.info("*Please complete the input section.*")
 
 
 if __name__ == "__main__":
