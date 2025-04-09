@@ -62,7 +62,7 @@ six==1.17.0
 smmap==5.0.2
 soupsieve==2.6
 stack-data==0.6.3
-streamlit==1.41.1
+streamlit==1.44.1
 streamlit-keyup==0.3.0
 tenacity==9.0.0
 threadpoolctl==3.5.0
