@@ -1,21 +1,10 @@
 import pathlib
 
-import pandas as pd
 import streamlit as st
-from src.clustering import (
-    calculate_top_genres,
-    k_prototypes_clustering,
-    merge_clusters_with_preprocessed_df,
-    recommend_similar_movies,
-)
-from src.components.custom_html import CUSTOM_BARS_TAB, CUSTOM_FORM, CUSTOM_METRIC
-from src.helper import get_median_values, get_timestamp, load_css
+from src.fragments import clustering_visualization
 from src.plots import (
     plot_average_popularity_by_year,
     plot_categorical_column_percentages,
-    plot_cluster_comparison_subplots,
-    plot_cluster_distribution_pie,
-    plot_clusters_with_pca,
     plot_column_distribution_pie,
     plot_country_counts,
     plot_movies_by_year,
@@ -24,6 +13,7 @@ from src.plots import (
     plot_votes_vs_score,
     plot_word_cloud,
 )
+from src.preprocessing import apply_pca, prepare_data_for_clustering
 from src.text_column_processing import (
     check_and_download_nltk_resources,
     clean_text,
@@ -33,9 +23,9 @@ from src.text_column_processing import (
 from src.tmdb import (
     extract_tmdb_id,
     get_movies_by_genre_from_reference_df,
-    prepare_tmdb_data_for_clustering,
     search_first_movie_by_title_and_year_tmdb,
 )
+from src.utils import get_median_values, get_timestamp, load_css
 
 st.set_page_config(layout="wide")
 
@@ -50,7 +40,7 @@ def submit_form():
 def main():
     st.title("Movie Recommendation Tool for Data Scientists 🎬")
 
-    col1, col2 = st.columns([2.5, 7.5])
+    col1, col2 = st.columns([2, 8])
 
     with col1:
         st.header("Movie Input", divider="gray")
@@ -128,14 +118,19 @@ def main():
     with col2:
         st.header("Results", divider="gray")
 
-        tab1, tab2 = st.tabs(
-            ["Exploratory Visualization of Data", "Clustering & Recommendations"]
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            [
+                "Exploratory Visualization of Data",
+                "K-Prototypes Clustering",
+                "K-Means Clustering",
+                "Agglomerative Clustering",
+                "Comparative Analysis",
+            ]
         )
 
         with tab1:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
 
-                st.session_state.data_submitted = False
                 st.subheader("Reference Movie Data")
                 st.dataframe(ref_movie_df, use_container_width=True, hide_index=True)
 
@@ -269,108 +264,62 @@ def main():
                     )
 
             else:
-                st.info("*Please complete input section.*")
+                st.info("*Please complete the input section.*")
         with tab2:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
+                with st.expander("Preprocessing Data"):
+                    st.header("Preprocessing Data")
+
+                    # Preparing data for clustering
+                    tmdb_movies_prepared_df, embeddings_df = (
+                        prepare_data_for_clustering(tmdb_movies_df)
+                    )
+                    features = tmdb_movies_prepared_df.drop(
+                        columns=["tmdb_id", "title"]
+                    ).columns.to_list()
+
+                    preprocessed_reduced_df = apply_pca(
+                        tmdb_movies_prepared_df,
+                        features,
+                        n_components=len(features),
+                        explained_variance_threshold=0.9,
+                    )
 
                 st.header("K-Prototypes Clustering")
-                tmdb_movies_prepared_df = prepare_tmdb_data_for_clustering(
-                    tmdb_movies_df
-                )
-                st.write("Using default hyperparameters (8 clusters).")
-                categorical_columns = [
-                    "original_language",
-                    "country_of_origin",
-                    "genres",
-                ]
-                df_kproto = k_prototypes_clustering(
-                    tmdb_movies_prepared_df, categorical_columns
-                )
-                df_kproto_final = merge_clusters_with_preprocessed_df(
-                    tmdb_movies_df, df_kproto
+
+                clustering_visualization(
+                    algo_name="K-Prototypes Clustering",
+                    preprocessed_df=tmdb_movies_prepared_df,
+                    reference_df=ref_movie_df,
+                    original_df=tmdb_movies_df,
                 )
 
-                st.subheader("Reference Movie Data")
-                df_reference_with_cluster = ref_movie_df.merge(
-                    df_kproto_final[["tmdb_id", "cluster"]],
-                    on="tmdb_id",
-                    how="left",
+        with tab3:
+            if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
+                st.header("K-Means Clustering")
+                clustering_visualization(
+                    algo_name="K-Means Clustering",
+                    preprocessed_df=preprocessed_reduced_df,
+                    reference_df=ref_movie_df,
+                    original_df=tmdb_movies_df,
                 )
 
-                st.dataframe(
-                    df_reference_with_cluster,
-                    use_container_width=True,
-                    hide_index=True,
+        with tab4:
+            if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
+                st.header("Agglomerative Clustering")
+                clustering_visualization(
+                    algo_name="Agglomerative Clustering",
+                    preprocessed_df=preprocessed_reduced_df,
+                    reference_df=ref_movie_df,
+                    original_df=tmdb_movies_df,
                 )
 
-                genre_top_col, cluster_dist_col = st.columns(2)
-                with genre_top_col:
-                    st.subheader("Top Cluster Genre")
-                    st.dataframe(
-                        calculate_top_genres(df_kproto_final),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-                with cluster_dist_col:
-                    st.subheader("Cluster distribution")
-                    st.plotly_chart(
-                        plot_cluster_distribution_pie(df_kproto_final),
-                        use_container_width=True,
-                    )
-
-                st.subheader("Cluster Numerical Feature Averages")
-                st.plotly_chart(
-                    plot_cluster_comparison_subplots(df_kproto_final),
-                    use_container_width=True,
-                )
-
-                st.subheader("2D Cluster Visualization using PCA")
-                features = [
-                    col
-                    for col in df_kproto.columns
-                    if col not in ["tmdb_id", "title", "cluster"]
-                ]
-                st.plotly_chart(
-                    plot_clusters_with_pca(
-                        df_kproto,
-                        cluster_column="cluster",
-                        title_column="title",
-                        id_column="tmdb_id",
-                        features=features,
-                    ),
-                    use_container_width=True,
-                )
-
-                st.subheader("Top 10 Movie Recommendations")
-                st.write(
-                    "The recommended movies belong to the same cluster as the reference movie and are ranked by their Euclidean distance."
-                )
-                features = [
-                    col
-                    for col in df_kproto.columns
-                    if col not in ["tmdb_id", "title", "cluster"]
-                ]
-
-                top_similar_movies_dist_df = recommend_similar_movies(
-                    df_kproto, ref_movie_df, features
-                )
-                top_similar_movies_df = df_kproto_final.merge(
-                    top_similar_movies_dist_df[["tmdb_id", "distance_to_reference"]],
-                    on="tmdb_id",
-                    how="right",
-                )
-                st.dataframe(
-                    top_similar_movies_df,
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-                # st.header("Decision Tree Clustering")
-                # st.subheader("Self-Organizing Maps (SOM)")
+        with tab5:
+            if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
+                st.header("Comparative Analysis")
 
             else:
-                st.info("*Please complete input section.*")
+                st.info("*Please complete the input section.*")
 
 
 if __name__ == "__main__":
