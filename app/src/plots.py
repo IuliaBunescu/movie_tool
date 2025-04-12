@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from wordcloud import WordCloud
 
 
@@ -602,6 +603,65 @@ def plot_top_bigrams(bigram_counts):
             automargin=True,  # ensures no labels are cut off
         ),
         margin=dict(l=0, r=0, t=0, b=0),
+    )
+
+    return fig
+
+
+def plot_clusters_with_tsne(
+    df,
+    cluster_column="cluster",
+    title_column="title",
+    id_column="tmdb_id",
+    features=None,
+    perplexity=50,
+    max_iter=1000,
+):
+    """
+    Visualizes clusters in 2D space using t-SNE for dimensionality reduction.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing features and cluster labels.
+        cluster_column (str): Column with cluster labels.
+        title_column (str): Column with movie titles.
+        id_column (str): Column with movie IDs.
+        features (list): List of numerical feature column names to include in t-SNE.
+        perplexity (int): t-SNE perplexity parameter.
+        max_iter (int): Number of optimization iterations for t-SNE.
+
+    Returns:
+        fig: A Plotly figure object with the t-SNE scatter plot.
+    """
+
+    # If no features are specified, use all columns except 'title' and 'id'
+    if features is None:
+        features = [
+            col
+            for col in df.columns
+            if col not in [title_column, id_column, cluster_column]
+        ]
+
+    # Apply t-SNE on the selected feature columns
+    tsne = TSNE(
+        n_components=2,
+        perplexity=perplexity,
+        max_iter=max_iter,
+    )
+    tsne_result = tsne.fit_transform(df[features])
+
+    # Add t-SNE results to the dataframe
+    df["TSNE_1"] = tsne_result[:, 0]
+    df["TSNE_2"] = tsne_result[:, 1]
+
+    # Plot the t-SNE scatter plot
+    fig = px.scatter(
+        df,
+        x="TSNE_1",
+        y="TSNE_2",
+        color=cluster_column,
+        hover_data={id_column: True, title_column: True},
+        labels={"TSNE_1": "t-SNE Dimension 1", "TSNE_2": "t-SNE Dimension 2"},
+        color_discrete_sequence=px.colors.sequential.Agsunset,
     )
 
     return fig
