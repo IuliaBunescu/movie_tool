@@ -29,7 +29,7 @@ from src.utils import get_median_values, get_timestamp, load_css
 
 st.set_page_config(layout="wide")
 
-css_path = pathlib.Path("assets/style.css")
+css_path = pathlib.Path("app/assets/style.css")
 load_css(css_path)
 
 
