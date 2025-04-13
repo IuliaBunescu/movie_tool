@@ -29,7 +29,8 @@ from src.utils import get_median_values, get_timestamp, load_css
 
 st.set_page_config(layout="wide")
 
-css_path = pathlib.Path("app/assets/style.css")
+CURRENT_DIR = pathlib.Path(__file__).parent
+css_path = CURRENT_DIR / "assets" / "style.css"
 load_css(css_path)
 
 
@@ -192,7 +193,7 @@ def main():
                         use_container_width=True,
                     )
 
-                st.subheader("Country Distribution")
+                st.subheader("Country Distribution (excluding USA)")
                 map_col, pie_col = st.columns(2, vertical_alignment="center")
                 with map_col:
                     st.plotly_chart(

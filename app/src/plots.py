@@ -92,6 +92,11 @@ def plot_country_counts(df, country_column, color1, color2):
     country_counts = countries.value_counts().reset_index()
     country_counts.columns = ["Country", "Count"]
 
+    # Remove United States from the data
+    country_counts = country_counts[
+        country_counts["Country"].str.lower() != "united states of america"
+    ]
+
     # Define a custom continuous color scale (with two colors)
     color_scale = [color1, color2]
 
