@@ -5,99 +5,108 @@ import pandas as pd
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 @st.cache_data(ttl=datetime.timedelta(hours=12), show_spinner=False)
-def prepare_data_for_clustering(df):
+def prepare_data_for_clustering(df, reference_tmdb_id):
     """
-    Prepares a DataFrame for clustering by scaling numerical features, encoding categorical features,
-    and adding BERT embeddings from the cleaned_overview (using SentenceTransformer).
+    Prepares DataFrames for clustering at different levels of detail:
+    1. Basic: TMDB ID, title, cosine similarity
+    2. Numerical: Adds scaled numerical features
+    3. Full: Adds categorical features (genres, country_of_origin, original_language)
 
     Parameters:
     - df: Original DataFrame with movie data.
+    - reference_tmdb_id: TMDB ID of the reference movie.
 
     Returns:
-    - Transformed DataFrame ready for clustering (with all features).
-    - DataFrame with movie id, name, and embeddings.
+    - df_basic: Basic DataFrame (reference columns + similarity)
+    - df_numerical: Adds numerical features
+    - df_full: Adds categorical features
     """
 
     st.markdown("### 🛠 Preparing data for clustering...")
-    print(f"\n{'='*50}\nStarted preparing dataset for clustering.")
+    print(f"\n{'='*50}")
+    print(f"Started preparing dataset for clustering.")
 
-    reference_columns = df[["tmdb_id", "title"]]
+    # Save reference columns
+    reference_columns = df[["tmdb_id", "title"]].copy()
 
+    # Save categorical features (not encoded)
+    categorical_cols = df[["country_of_origin", "original_language"]].copy()
+
+    # Drop irrelevant columns
     df = df.drop(
         columns=["imdb_id", "overview", "genres", "release_date", "country_of_origin"]
     )
-    st.markdown(
-        "- Dropped columns: `imdb_id`, `overview`, `genres`, `release_date`, `country_of_origin`"
-    )
-    print("- Dropped unused columns.")
+    st.markdown("- Dropped columns: `imdb_id`, `overview`, `genres`, `release_date`")
+    print(f"- Dropped unused columns.")
 
+    # Feature engineering
     df["log_popularity"] = np.log1p(df["popularity"])
-    st.markdown("- Log-transformed `popularity`")
-    print("- Applied log transformation to 'popularity'.")
+    st.markdown("- Log-transformed `popularity` → `log_popularity`")
+    print(f"- Applied log transformation to 'popularity'.")
 
     numerical_features = ["vote_average", "vote_count", "log_popularity"]
-    categorical_features = ["original_language"]
 
-    scaler = StandardScaler()
-    scaled_numerical = pd.DataFrame(
-        scaler.fit_transform(df[numerical_features]), columns=numerical_features
-    )
+    # Scaling numerical features
+    standard_scaler = StandardScaler()
+    minmax_scaler = MinMaxScaler(feature_range=(-1, 1))
+
+    scaled = standard_scaler.fit_transform(df[numerical_features])
+    scaled = minmax_scaler.fit_transform(scaled)
+
+    scaled_numerical = pd.DataFrame(scaled, columns=numerical_features)
+    scaled_numerical["log_popularity"] *= 0.1  # downweight
+    st.markdown("- Scaled numerical features and down-weighted `log_popularity` by 90%")
+    print(f"- Scaled numerical features.")
+
+    # Embeddings
     st.markdown(
-        "- Scaled numerical features: "
-        + ", ".join([f"`{feature}`" for feature in numerical_features])
-    )
-
-    print("- Scaled numerical columns.")
-
-    scaled_numerical["log_popularity"] *= 0.1
-    st.markdown("- Down-weighted `log_popularity` by 90%.")
-    print("- Adjusted 'log_popularity' by ×0.1.")
-
-    encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-    encoded_categorical = pd.DataFrame(
-        encoder.fit_transform(df[categorical_features]),
-        columns=encoder.get_feature_names_out(categorical_features),
-    )
-    st.markdown(f"- Encoded categorical features: `{', '.join(categorical_features)}`")
-
-    print("- One-hot encoded categorical features.")
-
-    st.markdown(
-        "<span style='color:gray'>Generating BERT embeddings on `overview` feature...</span>",
+        "<span style='color:gray'>Generating BERT embeddings on `cleaned_overview`...</span>",
         unsafe_allow_html=True,
     )
     model = SentenceTransformer("paraphrase-MiniLM-L6-v2")
     embeddings = model.encode(df["cleaned_overview"].tolist(), show_progress_bar=True)
-    st.markdown("- BERT embeddings added")
-    print("- Generated BERT embeddings.")
+    st.markdown("- ✅ BERT embeddings added")
+    print("- Generated BERT embeddings for 'cleaned_overview'.")
 
-    transformed_df = pd.concat(
-        [
-            reference_columns,
-            scaled_numerical,
-            encoded_categorical,
-            pd.DataFrame(embeddings),
-        ],
-        axis=1,
+    # Cosine similarity
+    try:
+        ref_index = df[df["tmdb_id"] == reference_tmdb_id].index[0]
+    except IndexError:
+        st.error(f"❌ Reference TMDB ID `{reference_tmdb_id}` not found in dataset.")
+        raise ValueError(
+            f"Reference TMDB ID {reference_tmdb_id} not found in the dataset."
+        )
+
+    reference_embedding = embeddings[ref_index].reshape(1, -1)
+    similarity_scores = cosine_similarity(embeddings, reference_embedding)
+    similarity_df = pd.DataFrame(similarity_scores, columns=["similarity_to_reference"])
+    st.markdown(
+        f"- Computed cosine similarity to reference movie (TMDB ID: `{reference_tmdb_id}`)"
     )
+    print(f"- Computed cosine similarity based on reference movie.")
 
-    transformed_df = transformed_df.dropna()
-    st.markdown("- Removed rows with missing values")
-    print("- Dropped rows with missing values.")
+    # --- Assemble outputs ---
+    df_basic = pd.concat([reference_columns, similarity_df], axis=1)
+    df_numerical = pd.concat([df_basic, scaled_numerical], axis=1)
+    df_full = pd.concat([df_numerical, categorical_cols], axis=1)
 
-    embeddings_df = pd.concat(
-        [reference_columns, pd.DataFrame(embeddings)],
-        axis=1,
-    )
+    # Remove any missing values
+    df_basic = df_basic.dropna()
+    df_numerical = df_numerical.dropna()
+    df_full = df_full.dropna()
 
     st.success("✅ Data is ready for clustering.")
-    print("Dataset preparation completed.\n" + "=" * 50)
+    print(f"\n{'='*50}")
+    print(
+        f"Dataset preparation completed using TMDB ID {reference_tmdb_id} as reference."
+    )
 
-    return transformed_df, embeddings_df
+    return df_basic, df_numerical, df_full
 
 
 def apply_pca(
