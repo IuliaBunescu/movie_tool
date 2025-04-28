@@ -1,6 +1,8 @@
 import pathlib
 
+import pandas as pd
 import streamlit as st
+from src.clustering import merge_with_preprocessed_df
 from src.fragments import clustering_visualization
 from src.plots import (
     plot_average_popularity_by_year,
@@ -22,14 +24,15 @@ from src.text_column_processing import (
 )
 from src.tmdb import (
     extract_tmdb_id,
-    get_movies_by_genre_from_reference_df,
+    get_movies_by_genres_from_reference_df,
     search_first_movie_by_title_and_year_tmdb,
 )
 from src.utils import get_median_values, get_timestamp, load_css
 
 st.set_page_config(layout="wide")
 
-css_path = pathlib.Path("app/assets/style.css")
+CURRENT_DIR = pathlib.Path(__file__).parent
+css_path = CURRENT_DIR / "assets" / "style.css"
 load_css(css_path)
 
 
@@ -38,7 +41,7 @@ def submit_form():
 
 
 def main():
-    st.title("Movie Recommendation Tool for Data Scientists 🎬")
+    st.title("Movie Recommendation Tool for Data Scientists")
 
     col1, col2 = st.columns([2, 8])
 
@@ -115,15 +118,18 @@ def main():
         else:
             st.warning("Please fill out the input form.")
 
+        preprocessing_container = st.container()
+
     with col2:
         st.header("Results", divider="gray")
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
             [
                 "Exploratory Visualization of Data",
-                "K-Prototypes Clustering",
+                "BERT Embeddings",
                 "K-Means Clustering",
                 "Agglomerative Clustering",
+                "K-Prototypes Clustering",
                 "Comparative Analysis",
             ]
         )
@@ -138,7 +144,7 @@ def main():
                     "The data is being sourced from *TMDB*. The initial selection criterion is **genre**. Approximately 1K movies with similar genres and at least 100 votes will be sources to create a custom dataset for your analysis."
                 )
 
-                tmdb_movies_df = get_movies_by_genre_from_reference_df(ref_movie_df)
+                tmdb_movies_df = get_movies_by_genres_from_reference_df(ref_movie_df)
                 print(f"\n{'='*50}")
                 print(
                     f"[{get_timestamp()}] Logging information about the TMDB movies DataFrame:"
@@ -192,7 +198,7 @@ def main():
                         use_container_width=True,
                     )
 
-                st.subheader("Country Distribution")
+                st.subheader("Country Distribution (excluding USA)")
                 map_col, pie_col = st.columns(2, vertical_alignment="center")
                 with map_col:
                     st.plotly_chart(
@@ -265,58 +271,124 @@ def main():
 
             else:
                 st.info("*Please complete the input section.*")
+
+        if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
+            with preprocessing_container:
+                st.header("Preprocessing Data", divider="gray")
+
+                # Preparing data for clustering
+                df_basic, df_numerical, df_full = prepare_data_for_clustering(
+                    tmdb_movies_df, ref_movie_df["tmdb_id"].values[0]
+                )
+
+                # Select numerical features
+                features = df_numerical.drop(
+                    columns=["tmdb_id", "title"]
+                ).columns.tolist()
+
+                # Apply PCA once on numerical
+                df_numerical_reduced = apply_pca(
+                    df_numerical,
+                    features,
+                    n_components=len(features),
+                    explained_variance_threshold=0.9,
+                )
+
+                df_full_reduced = df_full[
+                    [
+                        "tmdb_id",
+                        "title",
+                        "country_of_origin",
+                        "original_language",
+                    ]
+                ].merge(
+                    df_numerical_reduced.drop(columns=["title"]),
+                    on="tmdb_id",
+                    how="left",
+                )
+
         with tab2:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
-                with st.expander("Preprocessing Data"):
-                    st.header("Preprocessing Data")
+                st.header("BERT Embeddings")
 
-                    # Preparing data for clustering
-                    tmdb_movies_prepared_df, embeddings_df = (
-                        prepare_data_for_clustering(tmdb_movies_df)
-                    )
-                    features = tmdb_movies_prepared_df.drop(
-                        columns=["tmdb_id", "title"]
-                    ).columns.to_list()
-
-                    preprocessed_reduced_df = apply_pca(
-                        tmdb_movies_prepared_df,
-                        features,
-                        n_components=len(features),
-                        explained_variance_threshold=0.9,
-                    )
-
-                st.header("K-Prototypes Clustering")
-
-                clustering_visualization(
-                    algo_name="K-Prototypes Clustering",
-                    preprocessed_df=tmdb_movies_prepared_df,
-                    reference_df=ref_movie_df,
-                    original_df=tmdb_movies_df,
+                st.write(
+                    "The similarity between the target movie and others was determined using cosine similarity, based exclusively on the embeddings from the `overview` column."
                 )
+                # Merge results with original metadata
+                merged_similarity_df = merge_with_preprocessed_df(
+                    tmdb_movies_df, df_basic, expect_cluster=False
+                )
+                df_sorted = merged_similarity_df.sort_values(
+                    by="similarity_to_reference", ascending=False
+                )
+
+                # Select top 11 rows: first one is reference (similarity = 1), next 10 are recommendations
+                df_final_recommendations = df_sorted.head(11).reset_index(drop=True)
+
+                st.subheader("Top 10 Movie Recommendations")
+                st.dataframe(
+                    df_final_recommendations.drop(columns=["tmdb_id"]),
+                    column_config={
+                        "imdb_link": st.column_config.LinkColumn(
+                            display_text="https://www.imdb.com/title/(.*?)/"
+                        ),
+                        "tmdb_link": st.column_config.LinkColumn(
+                            display_text="https://www.themoviedb.org/movie/(\\d+)"
+                        ),
+                    },
+                    use_container_width=True,
+                )
+
+            else:
+                st.info("*Please complete the input section.*")
 
         with tab3:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
                 st.header("K-Means Clustering")
                 clustering_visualization(
                     algo_name="K-Means Clustering",
-                    preprocessed_df=preprocessed_reduced_df,
+                    preprocessed_df=df_numerical_reduced,
                     reference_df=ref_movie_df,
                     original_df=tmdb_movies_df,
                 )
+            else:
+                st.info("*Please complete the input section.*")
 
         with tab4:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
                 st.header("Agglomerative Clustering")
                 clustering_visualization(
                     algo_name="Agglomerative Clustering",
-                    preprocessed_df=preprocessed_reduced_df,
+                    preprocessed_df=df_numerical_reduced,
+                    reference_df=ref_movie_df,
+                    original_df=tmdb_movies_df,
+                )
+            else:
+                st.info("*Please complete the input section.*")
+
+        with tab5:
+            if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
+                st.header("K-Prototypes Clustering")
+
+                clustering_visualization(
+                    algo_name="K-Prototypes Clustering",
+                    preprocessed_df=df_full_reduced,
                     reference_df=ref_movie_df,
                     original_df=tmdb_movies_df,
                 )
 
-        with tab5:
+            else:
+                st.info("*Please complete the input section.*")
+
+        with tab6:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
                 st.header("Comparative Analysis")
+
+                st.subheader("Cluster Quality Evaluation")
+                st.session_state.cluster_quality_df.drop_duplicates(
+                    subset=["algorithm"], inplace=True, keep="last"
+                )
+                st.dataframe(st.session_state.cluster_quality_df)
 
             else:
                 st.info("*Please complete the input section.*")

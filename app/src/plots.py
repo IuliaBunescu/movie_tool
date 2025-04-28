@@ -92,6 +92,11 @@ def plot_country_counts(df, country_column, color1, color2):
     country_counts = countries.value_counts().reset_index()
     country_counts.columns = ["Country", "Count"]
 
+    # Remove United States from the data
+    country_counts = country_counts[
+        country_counts["Country"].str.lower() != "united states of america"
+    ]
+
     # Define a custom continuous color scale (with two colors)
     color_scale = [color1, color2]
 
@@ -609,19 +614,19 @@ def plot_top_bigrams(bigram_counts):
 
 
 def plot_clusters_with_tsne(
-    df,
+    input_df,
     cluster_column="cluster",
     title_column="title",
     id_column="tmdb_id",
     features=None,
-    perplexity=50,
-    max_iter=1000,
+    perplexity=10,
+    max_iter=500,
 ):
     """
     Visualizes clusters in 2D space using t-SNE for dimensionality reduction.
 
     Args:
-        df (pd.DataFrame): DataFrame containing features and cluster labels.
+        input_df (pd.DataFrame): DataFrame containing features and cluster labels.
         cluster_column (str): Column with cluster labels.
         title_column (str): Column with movie titles.
         id_column (str): Column with movie IDs.
@@ -632,7 +637,7 @@ def plot_clusters_with_tsne(
     Returns:
         fig: A Plotly figure object with the t-SNE scatter plot.
     """
-
+    df = input_df.copy()
     # If no features are specified, use all columns except 'title' and 'id'
     if features is None:
         features = [
@@ -652,6 +657,8 @@ def plot_clusters_with_tsne(
     # Add t-SNE results to the dataframe
     df["TSNE_1"] = tsne_result[:, 0]
     df["TSNE_2"] = tsne_result[:, 1]
+
+    df[cluster_column] = df[cluster_column].astype("category")
 
     # Plot the t-SNE scatter plot
     fig = px.scatter(
