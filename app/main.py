@@ -126,7 +126,7 @@ def main():
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
             [
                 "Exploratory Visualization of Data",
-                "BERT Embeddings",
+                "Cross-Encoder Similarity",
                 "K-Means Clustering",
                 "Agglomerative Clustering",
                 "K-Prototypes Clustering",
@@ -309,10 +309,10 @@ def main():
 
         with tab2:
             if (movie_ref_url or movie_ref_tmdb) and st.session_state.data_submitted:
-                st.header("BERT Embeddings")
+                st.header("Cross-Encoder Similarity")
 
                 st.write(
-                    "The similarity between the target movie and others was determined using cosine similarity, based exclusively on the embeddings from the `overview` column."
+                    "The similarity between the target movie and others was computed using a RoBERTa-based cross-encoder, which directly compares each pair of movie overviews from the `cleaned_overview` column."
                 )
                 # Merge results with original metadata
                 merged_similarity_df = merge_with_preprocessed_df(
