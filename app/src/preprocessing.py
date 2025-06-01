@@ -3,7 +3,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import streamlit as st
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -63,32 +63,32 @@ def prepare_data_for_clustering(df, reference_tmdb_id):
     st.markdown("- Scaled numerical features and down-weighted `log_popularity` by 90%")
     print(f"- Scaled numerical features.")
 
-    # Embeddings
+    # Similarity
     st.markdown(
-        "<span style='color:gray'>Generating BERT embeddings on `cleaned_overview`...</span>",
+        "<span style='color:gray'>Computing pairwise similarity using a RoBERTa-based cross-encoder on <code>cleaned_overview</code>...</span>",
         unsafe_allow_html=True,
     )
-    model = SentenceTransformer("paraphrase-MiniLM-L6-v2")
-    embeddings = model.encode(df["cleaned_overview"].tolist(), show_progress_bar=True)
-    st.markdown("- ✅ BERT embeddings added")
-    print("- Generated BERT embeddings for 'cleaned_overview'.")
+    model = CrossEncoder("cross-encoder/stsb-roberta-base")
 
-    # Cosine similarity
     try:
         ref_index = df[df["tmdb_id"] == reference_tmdb_id].index[0]
     except IndexError:
-        st.error(f"❌ Reference TMDB ID `{reference_tmdb_id}` not found in dataset.")
         raise ValueError(
             f"Reference TMDB ID {reference_tmdb_id} not found in the dataset."
         )
 
-    reference_embedding = embeddings[ref_index].reshape(1, -1)
-    similarity_scores = cosine_similarity(embeddings, reference_embedding)
+    reference_text = df.loc[ref_index, "cleaned_overview"]
+
+    # Create sentence pairs: (reference, other)
+    pairs = [(reference_text, other) for other in df["cleaned_overview"].tolist()]
+
+    # Predict similarity scores
+    similarity_scores = model.predict(pairs, show_progress_bar=True)
     similarity_df = pd.DataFrame(similarity_scores, columns=["similarity_to_reference"])
     st.markdown(
-        f"- Computed cosine similarity to reference movie (TMDB ID: `{reference_tmdb_id}`)"
+        f"- Predicted similarity to reference movie (TMDB ID: `{reference_tmdb_id}`)"
     )
-    print(f"- Computed cosine similarity based on reference movie.")
+    print(f"- Predicted cosine similarity based on reference movie.")
 
     # --- Assemble outputs ---
     df_basic = pd.concat([reference_columns, similarity_df], axis=1)
